@@ -259,7 +259,7 @@ put('version')
 fixdict(1 + #version)
 for _, item in ipairs(version) do
   -- NB: all items are mandatory. But any error will be less confusing
-  -- with placholder vim.NIL (than invalid mpack data)
+  -- with placeholder vim.NIL (than invalid mpack data)
   put(item[1], item[2] or vim.NIL)
 end
 put('build', version_build)
@@ -307,7 +307,6 @@ output:write([[
 #include "nvim/globals.h"
 #include "nvim/log.h"
 #include "nvim/map_defs.h"
-#include "nvim/msgpack_rpc/helpers.h"
 
 #include "nvim/api/autocmd.h"
 #include "nvim/api/buffer.h"
@@ -914,7 +913,7 @@ exit_0:
       write_shifted_output(string.format(
         [[
     if (lua_gettop(lstate) == 0) {
-      nlua_push_%s(lstate, %sret, true);
+      nlua_push_%s(lstate, %sret, kNluaPushSpecial | kNluaPushFreeRefs);
     }
       ]],
         return_type,
@@ -928,10 +927,10 @@ exit_0:
     else
       local special = (fn.since ~= nil and fn.since < 11)
       write_shifted_output(
-        '    nlua_push_%s(lstate, %sret, %s);\n',
+        '    nlua_push_%s(lstate, %sret, %s | kNluaPushFreeRefs);\n',
         return_type,
         ret_mode,
-        tostring(special)
+        special and 'kNluaPushSpecial' or '0'
       )
     end
 

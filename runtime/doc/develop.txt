@@ -184,7 +184,7 @@ Strict "vimdoc" subset:
 
 C docstrings ~
 
-Nvim API documentation lives in the source code, as docstrings (Doxygen
+Nvim API documentation lives in the source code, as docstrings (doc
 comments) on the function definitions.  The |api| :help is generated
 from the docstrings defined in src/nvim/api/*.c.
 
@@ -193,6 +193,8 @@ Docstring format:
 - Special tokens start with `@` followed by the token name:
   `@note`, `@param`, `@return`
 - Markdown is supported.
+- Tags are written as `[tag]()`.
+- References are written as `[tag]`
 - Use ``` for code samples.
   Code samples can be annotated as `vim` or `lua`
 
@@ -235,6 +237,8 @@ definitions.  The |lua-vim| :help is generated from the docstrings.
 Docstring format:
 - Use LuaCATS annotations: https://luals.github.io/wiki/annotations/
 - Markdown is supported.
+- Tags are written as `[tag]()`.
+- References are written as `[tag]`
 - Use ``` for code samples.
   Code samples can be annotated as `vim` or `lua`
 - Use `@nodoc` to prevent documentation generation.
@@ -368,20 +372,26 @@ Use existing common {verb} names (actions) if possible:
     - create:       Creates a new (non-trivial) thing (TODO: rename to "def"?)
     - del:          Deletes a thing (or group of things)
     - detach:       Dispose attached listener (TODO: rename to "un"?)
+    - enable:       Enables/disables functionality. Signature should be
+                    `enable(enable?:boolean, filter?:table)`.
     - eval:         Evaluates an expression
     - exec:         Executes code
     - fmt:          Formats
     - get:          Gets things (often by a query)
     - inspect:      Presents a high-level, often interactive, view
+    - is_enabled:   Checks if functionality is enabled.
     - open:         Opens something (a buffer, window, …)
     - parse:        Parses something into a structured form
     - set:          Sets a thing (or group of things)
     - try_{verb}:   Best-effort operation, failure returns null or error obj
 
 Do NOT use these deprecated verbs:
+    - disable:      Prefer `enable(enable: boolean)`.
+    - is_disabled:  Prefer `is_enabled()`.
     - list:         Redundant with "get"
-    - show:         Redundant with "print", "echo"
     - notify:       Redundant with "print", "echo"
+    - show:         Redundant with "print", "echo"
+    - toggle:       Prefer `enable(not is_enabled())`.
 
 Use consistent names for {noun} (nouns) in API functions: buffer is called
 "buf" everywhere, not "buffer" in some places and "buf" in others.

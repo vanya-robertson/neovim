@@ -74,7 +74,6 @@ vim.log = {
 --- Examples:
 ---
 --- ```lua
----
 --- local on_exit = function(obj)
 ---   print(obj.code)
 ---   print(obj.signal)
@@ -122,6 +121,7 @@ vim.log = {
 ---   asynchronously. Receives SystemCompleted object, see return of SystemObj:wait().
 ---
 --- @return vim.SystemObj Object with the fields:
+---   - cmd (string[]) Command name and args
 ---   - pid (integer) Process ID
 ---   - wait (fun(timeout: integer|nil): SystemCompleted) Wait for the process to complete. Upon
 ---     timeout the process is sent the KILL signal (9) and the exit code is set to 124. Cannot
@@ -502,7 +502,7 @@ end
 ---@param bufnr integer Buffer number, or 0 for current buffer
 ---@param pos1 integer[]|string Start of region as a (line, column) tuple or |getpos()|-compatible string
 ---@param pos2 integer[]|string End of region as a (line, column) tuple or |getpos()|-compatible string
----@param regtype string \|setreg()|-style selection type
+---@param regtype string [setreg()]-style selection type
 ---@param inclusive boolean Controls whether the ending column is inclusive (see also 'selection').
 ---@return table region Dict of the form `{linenr = {startcol,endcol}}`. `endcol` is exclusive, and
 ---whole lines are returned as `{startcol,endcol} = {0,-1}`.
@@ -655,11 +655,14 @@ local on_key_cbs = {} --- @type table<integer,function>
 ---
 ---@note {fn} will be removed on error.
 ---@note {fn} will not be cleared by |nvim_buf_clear_namespace()|
----@note {fn} will receive the keys after mappings have been evaluated
 ---
----@param fn fun(key: string)? Function invoked on every key press. |i_CTRL-V|
----                   Passing in nil when {ns_id} is specified removes the
----                   callback associated with namespace {ns_id}.
+---@param fn fun(key: string, typed: string)?
+---                   Function invoked on every key press. |i_CTRL-V|
+---                   {key} is the key after mappings have been applied, and
+---                   {typed} is the key(s) before mappings are applied, which
+---                   may be empty if {key} is produced by non-typed keys.
+---                   When {fn} is nil and {ns_id} is specified, the callback
+---                   associated with namespace {ns_id} is removed.
 ---@param ns_id integer? Namespace ID. If nil or 0, generates and returns a
 ---                     new |nvim_create_namespace()| id.
 ---
@@ -685,11 +688,11 @@ end
 
 --- Executes the on_key callbacks.
 ---@private
-function vim._on_key(char)
+function vim._on_key(buf, typed_buf)
   local failed_ns_ids = {}
   local failed_messages = {}
   for k, v in pairs(on_key_cbs) do
-    local ok, err_msg = pcall(v, char)
+    local ok, err_msg = pcall(v, buf, typed_buf)
     if not ok then
       vim.on_key(nil, k)
       table.insert(failed_ns_ids, k)
@@ -908,12 +911,6 @@ do
   end
 end
 
----@private
-function vim.pretty_print(...)
-  vim.deprecate('vim.pretty_print()', 'vim.print()', '0.10')
-  return vim.print(...)
-end
-
 --- "Pretty prints" the given arguments and returns them unmodified.
 ---
 --- Example:
@@ -1052,10 +1049,11 @@ function vim.deprecate(name, alternative, version, plugin, backtrace)
     plugin = { plugin, 'string', true },
   }
   plugin = plugin or 'Nvim'
+  local will_be_removed = 'will be removed'
 
   -- Only issue warning if feature is hard-deprecated as specified by MAINTAIN.md.
-  -- e.g., when planned to be removed in version = '0.12' (soft-deprecated since 0.10-dev),
-  -- show warnings since 0.11, including 0.11-dev (hard_deprecated_since = 0.11-dev).
+  -- Example: if removal_version is 0.12 (soft-deprecated since 0.10-dev), show warnings starting at
+  -- 0.11, including 0.11-dev (hard_deprecated_since = 0.11-dev).
   if plugin == 'Nvim' then
     local current_version = vim.version() ---@type vim.Version
     local removal_version = assert(vim.version.parse(version))
@@ -1078,14 +1076,17 @@ function vim.deprecate(name, alternative, version, plugin, backtrace)
 
     if not is_hard_deprecated then
       return
+    elseif current_version >= removal_version then
+      will_be_removed = 'was removed'
     end
   end
 
   local msg = ('%s is deprecated'):format(name)
   msg = alternative and ('%s, use %s instead.'):format(msg, alternative) or (msg .. '.')
-  msg = ('%s%s\nThis feature will be removed in %s version %s'):format(
+  msg = ('%s%s\nFeature %s in %s %s'):format(
     msg,
     (plugin == 'Nvim' and ' :help deprecated' or ''),
+    will_be_removed,
     plugin,
     version
   )

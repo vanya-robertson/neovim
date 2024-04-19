@@ -1,7 +1,7 @@
-local helpers = require('test.functional.helpers')(after_each)
-local clear, eval, eq = helpers.clear, helpers.eval, helpers.eq
-local feed, command, expect = helpers.feed, helpers.command, helpers.expect
-local api, fn, neq = helpers.api, helpers.fn, helpers.neq
+local t = require('test.functional.testutil')()
+local clear, eval, eq = t.clear, t.eval, t.eq
+local feed, command, expect = t.feed, t.command, t.expect
+local api, fn, neq = t.api, t.fn, t.neq
 
 describe('TextYankPost', function()
   before_each(function()
@@ -72,19 +72,19 @@ describe('TextYankPost', function()
     command('set debug=msg')
     -- the regcontents should not be changed without copy.
     local status, err = pcall(command, 'call extend(g:event.regcontents, ["more text"])')
-    eq(status, false)
+    eq(false, status)
     neq(nil, string.find(err, ':E742:'))
 
     -- can't mutate keys inside the autocommand
     command('autocmd! TextYankPost * let v:event.regcontents = 0')
     status, err = pcall(command, 'normal yy')
-    eq(status, false)
+    eq(false, status)
     neq(nil, string.find(err, ':E46:'))
 
     -- can't add keys inside the autocommand
     command('autocmd! TextYankPost * let v:event.mykey = 0')
     status, err = pcall(command, 'normal yy')
-    eq(status, false)
+    eq(false, status)
     neq(nil, string.find(err, ':E742:'))
   end)
 

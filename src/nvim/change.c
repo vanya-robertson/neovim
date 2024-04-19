@@ -342,9 +342,8 @@ static void changed_common(buf_T *buf, linenr_T lnum, colnr_T col, linenr_T lnum
           && (last < wp->w_topline
               || (wp->w_topline >= lnum
                   && wp->w_topline < lnume
-                  && win_linetabsize(wp, wp->w_topline, ml_get(wp->w_topline), MAXCOL)
-                  <= (wp->w_skipcol
-                      + sms_marker_overlap(wp, win_col_off(wp) - win_col_off2(wp)))))) {
+                  && win_linetabsize(wp, wp->w_topline, ml_get_buf(buf, wp->w_topline), MAXCOL)
+                  <= (wp->w_skipcol + sms_marker_overlap(wp, -1))))) {
         wp->w_skipcol = 0;
       }
 
@@ -707,14 +706,14 @@ void ins_char(int c)
 void ins_char_bytes(char *buf, size_t charlen)
 {
   // Break tabs if needed.
-  if (virtual_active() && curwin->w_cursor.coladd > 0) {
+  if (virtual_active(curwin) && curwin->w_cursor.coladd > 0) {
     coladvance_force(getviscol());
   }
 
   size_t col = (size_t)curwin->w_cursor.col;
   linenr_T lnum = curwin->w_cursor.lnum;
   char *oldp = ml_get(lnum);
-  size_t linelen = strlen(oldp) + 1;  // length of old line including NUL
+  size_t linelen = (size_t)ml_get_len(lnum) + 1;  // length of old line including NUL
 
   // The lengths default to the values for when not replacing.
   size_t oldlen = 0;        // nr of bytes inserted
@@ -815,13 +814,13 @@ void ins_str(char *s)
   int newlen = (int)strlen(s);
   linenr_T lnum = curwin->w_cursor.lnum;
 
-  if (virtual_active() && curwin->w_cursor.coladd > 0) {
+  if (virtual_active(curwin) && curwin->w_cursor.coladd > 0) {
     coladvance_force(getviscol());
   }
 
   colnr_T col = curwin->w_cursor.col;
   char *oldp = ml_get(lnum);
-  int oldlen = (int)strlen(oldp);
+  int oldlen = ml_get_len(lnum);
 
   char *newp = xmalloc((size_t)oldlen + (size_t)newlen + 1);
   if (col > 0) {
@@ -879,7 +878,7 @@ int del_bytes(colnr_T count, bool fixpos_arg, bool use_delcombine)
   colnr_T col = curwin->w_cursor.col;
   bool fixpos = fixpos_arg;
   char *oldp = ml_get(lnum);
-  colnr_T oldlen = (colnr_T)strlen(oldp);
+  colnr_T oldlen = ml_get_len(lnum);
 
   // Can't do anything when the cursor is on the NUL after the line.
   if (col >= oldlen) {
@@ -918,7 +917,7 @@ int del_bytes(colnr_T count, bool fixpos_arg, bool use_delcombine)
     // fixpos is true, we don't want to end up positioned at the NUL,
     // unless "restart_edit" is set or 'virtualedit' contains "onemore".
     if (col > 0 && fixpos && restart_edit == 0
-        && (get_ve_flags() & VE_ONEMORE) == 0) {
+        && (get_ve_flags(curwin) & VE_ONEMORE) == 0) {
       curwin->w_cursor.col--;
       curwin->w_cursor.coladd = 0;
       curwin->w_cursor.col -= utf_head_off(oldp, oldp + curwin->w_cursor.col);
@@ -926,21 +925,24 @@ int del_bytes(colnr_T count, bool fixpos_arg, bool use_delcombine)
     count = oldlen - col;
     movelen = 1;
   }
+  colnr_T newlen = oldlen - count;
 
   // If the old line has been allocated the deletion can be done in the
   // existing line. Otherwise a new line has to be allocated.
-  bool was_alloced = ml_line_alloced();     // check if oldp was allocated
+  bool alloc_newp = !ml_line_alloced();     // check if oldp was allocated
   char *newp;
-  if (was_alloced) {
+  if (!alloc_newp) {
     ml_add_deleted_len(curbuf->b_ml.ml_line_ptr, oldlen);
     newp = oldp;                            // use same allocated memory
   } else {                                  // need to allocate a new line
-    newp = xmalloc((size_t)(oldlen + 1 - count));
+    newp = xmalloc((size_t)newlen + 1);
     memmove(newp, oldp, (size_t)col);
   }
   memmove(newp + col, oldp + col + count, (size_t)movelen);
-  if (!was_alloced) {
+  if (alloc_newp) {
     ml_replace(lnum, newp, false);
+  } else {
+    curbuf->b_ml.ml_line_len -= count;
   }
 
   // mark the buffer as changed and prepare for displaying
@@ -1041,7 +1043,7 @@ bool copy_indent(int size, char *src)
     if (p == NULL) {
       // Allocate memory for the result: the copied indent, new indent
       // and the rest of the line.
-      line_len = (int)strlen(get_cursor_line_ptr()) + 1;
+      line_len = get_cursor_line_len() + 1;
       assert(ind_len + line_len >= 0);
       size_t line_size;
       STRICT_ADD(ind_len, line_len, &line_size, size_t);
@@ -1114,7 +1116,7 @@ bool open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
   colnr_T mincol = curwin->w_cursor.col + 1;
 
   // make a copy of the current line so we can mess with it
-  char *saved_line = xstrdup(get_cursor_line_ptr());
+  char *saved_line = xstrnsave(get_cursor_line_ptr(), (size_t)get_cursor_line_len());
 
   if (State & VREPLACE_FLAG) {
     // With MODE_VREPLACE we make a copy of the next line, which we will be
@@ -1125,7 +1127,8 @@ bool open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
     // the line, replacing what was there before and pushing the right
     // stuff onto the replace stack.  -- webb.
     if (curwin->w_cursor.lnum < orig_line_count) {
-      next_line = xstrdup(ml_get(curwin->w_cursor.lnum + 1));
+      next_line = xstrnsave(ml_get(curwin->w_cursor.lnum + 1),
+                            (size_t)ml_get_len(curwin->w_cursor.lnum + 1));
     } else {
       next_line = xstrdup("");
     }
@@ -1834,6 +1837,13 @@ bool open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
 
       saved_line = NULL;
       if (did_append) {
+        // Always move extmarks - Here we move only the line where the cursor is,
+        // the previous mark_adjust() took care of the lines after.
+        int cols_added = mincol - 1 + less_cols_off - less_cols;
+        extmark_splice(curbuf, (int)lnum - 1, mincol - 1 - cols_spliced,
+                       0, less_cols_off, less_cols_off,
+                       1, cols_added, 1 + cols_added, kExtmarkUndo);
+
         changed_lines(curbuf, curwin->w_cursor.lnum, curwin->w_cursor.col,
                       curwin->w_cursor.lnum + 1, 1, true);
         did_append = false;
@@ -1844,12 +1854,6 @@ bool open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
                           curwin->w_cursor.col + less_cols_off,
                           1, -less_cols, 0);
         }
-        // Always move extmarks - Here we move only the line where the
-        // cursor is, the previous mark_adjust takes care of the lines after
-        int cols_added = mincol - 1 + less_cols_off - less_cols;
-        extmark_splice(curbuf, (int)lnum - 1, mincol - 1 - cols_spliced,
-                       0, less_cols_off, less_cols_off,
-                       1, cols_added, 1 + cols_added, kExtmarkUndo);
       } else {
         changed_bytes(curwin->w_cursor.lnum, curwin->w_cursor.col);
       }
@@ -1861,7 +1865,7 @@ bool open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
   }
   if (did_append) {
     // bail out and just get the final length of the line we just manipulated
-    bcount_t extra = (bcount_t)strlen(ml_get(curwin->w_cursor.lnum));
+    bcount_t extra = ml_get_len(curwin->w_cursor.lnum);
     extmark_splice(curbuf, (int)curwin->w_cursor.lnum - 1, 0,
                    0, 0, 0, 1, 0, 1 + extra, kExtmarkUndo);
     changed_lines(curbuf, curwin->w_cursor.lnum, 0, curwin->w_cursor.lnum, 1, true);
@@ -1905,7 +1909,7 @@ bool open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
   // stuff onto the replace stack (via ins_char()).
   if (State & VREPLACE_FLAG) {
     // Put new line in p_extra
-    p_extra = xstrdup(get_cursor_line_ptr());
+    p_extra = xstrnsave(get_cursor_line_ptr(), (size_t)get_cursor_line_len());
 
     // Put back original line
     ml_replace(curwin->w_cursor.lnum, next_line, false);
@@ -1932,19 +1936,16 @@ theend:
 /// If "fixpos" is true fix the cursor position when done.
 void truncate_line(int fixpos)
 {
-  char *newp;
   linenr_T lnum = curwin->w_cursor.lnum;
   colnr_T col = curwin->w_cursor.col;
+  char *old_line = ml_get(lnum);
+  char *newp = col == 0 ? xstrdup("") : xstrnsave(old_line, (size_t)col);
+  int deleted = ml_get_len(lnum) - col;
 
-  if (col == 0) {
-    newp = xstrdup("");
-  } else {
-    newp = xstrnsave(ml_get(lnum), (size_t)col);
-  }
   ml_replace(lnum, newp, false);
 
   // mark the buffer as changed and prepare for displaying
-  changed_bytes(lnum, curwin->w_cursor.col);
+  inserted_bytes(lnum, curwin->w_cursor.col, deleted, 0);
 
   // If "fixpos" is true we don't want to end up positioned at the NUL.
   if (fixpos && curwin->w_cursor.col > 0) {

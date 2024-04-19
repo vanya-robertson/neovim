@@ -52,6 +52,7 @@ Defaults					            *nvim-defaults*
 - 'encoding' is UTF-8 (cf. 'fileencoding' for file-content encoding)
 - 'fillchars' defaults (in effect) to "vert:│,fold:·,foldsep:│"
 - 'formatoptions' defaults to "tcqj"
+- 'grepprg' defaults to using ripgrep if available
 - 'hidden' is enabled
 - 'history' defaults to 10000 (the maximum)
 - 'hlsearch' is enabled
@@ -80,6 +81,7 @@ Defaults					            *nvim-defaults*
 - 'tags' defaults to "./tags;,tags"
 - 'termguicolors' is enabled by default if Nvim can detect support from the
   host terminal
+- 'ttimeout' is enabled
 - 'ttimeoutlen' defaults to 50
 - 'ttyfast' is always set
 - 'undodir' defaults to ~/.local/state/nvim/undo// (|xdg|), auto-created
@@ -133,6 +135,8 @@ of these in your config by simply removing the mapping, e.g. ":unmap Y".
 - @ |v_@-default|
 - # |v_#-default|
 - * |v_star-default|
+- gc |gc-default| |v_gc-default| |o_gc-default|
+- gcc |gcc-default|
 - Nvim LSP client defaults |lsp-defaults|
   - K |K-lsp-default|
 

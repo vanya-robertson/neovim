@@ -1,5 +1,5 @@
-local helpers = require('test.functional.helpers')(after_each)
-local eq = helpers.eq
+local t = require('test.functional.testutil')()
+local eq = t.eq
 
 local grammar = require('scripts/luacats_grammar')
 
@@ -139,4 +139,16 @@ describe('luacats grammar', function()
       type = 'string|table|(fun(diagnostic:vim.Diagnostic,i:integer,total:integer): string, string)',
     }
   )
+
+  test('@field [integer] integer', {
+    kind = 'field',
+    name = '[integer]',
+    type = 'integer',
+  })
+
+  test('@field [1] integer', {
+    kind = 'field',
+    name = '[1]',
+    type = 'integer',
+  })
 end)

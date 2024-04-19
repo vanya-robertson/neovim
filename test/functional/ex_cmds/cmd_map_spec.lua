@@ -1,14 +1,14 @@
-local helpers = require('test.functional.helpers')(after_each)
-local clear = helpers.clear
-local feed = helpers.feed
-local eq = helpers.eq
-local expect = helpers.expect
-local eval = helpers.eval
-local fn = helpers.fn
-local insert = helpers.insert
-local write_file = helpers.write_file
-local exc_exec = helpers.exc_exec
-local command = helpers.command
+local t = require('test.functional.testutil')()
+local clear = t.clear
+local feed = t.feed
+local eq = t.eq
+local expect = t.expect
+local eval = t.eval
+local fn = t.fn
+local insert = t.insert
+local write_file = t.write_file
+local exc_exec = t.exc_exec
+local command = t.command
 local Screen = require('test.functional.ui.screen')
 
 describe('mappings with <Cmd>', function()
@@ -505,7 +505,7 @@ describe('mappings with <Cmd>', function()
     feed('"bd<F7>')
     expect([[
         soest text]])
-    eq(fn.getreg('b', 1, 1), { 'me short lines', 'of t' })
+    eq({ 'me short lines', 'of t' }, fn.getreg('b', 1, 1))
 
     -- startinsert aborts operator
     feed('d<F8>')
@@ -561,7 +561,7 @@ describe('mappings with <Cmd>', function()
       of stuff test text]])
 
     feed('<F5>')
-    eq(fn.getreg('a', 1, 1), { 'deed some short little lines', 'of stuff t' })
+    eq({ 'deed some short little lines', 'of stuff t' }, fn.getreg('a', 1, 1))
 
     -- still in insert
     screen:expect([[

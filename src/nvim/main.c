@@ -14,7 +14,9 @@
 #include <string.h>
 #ifdef ENABLE_ASAN_UBSAN
 # include <sanitizer/asan_interface.h>
-# include <sanitizer/ubsan_interface.h>
+# ifndef MSWIN
+#  include <sanitizer/ubsan_interface.h>
+# endif
 #endif
 
 #include "auto/config.h"  // IWYU pragma: keep
@@ -70,7 +72,6 @@
 #include "nvim/mouse.h"
 #include "nvim/move.h"
 #include "nvim/msgpack_rpc/channel.h"
-#include "nvim/msgpack_rpc/helpers.h"
 #include "nvim/msgpack_rpc/server.h"
 #include "nvim/normal.h"
 #include "nvim/ops.h"
@@ -152,11 +153,9 @@ void event_init(void)
   loop_init(&main_loop, NULL);
   resize_events = multiqueue_new_child(main_loop.events);
 
-  // early msgpack-rpc initialization
-  msgpack_rpc_helpers_init();
   input_init();
   signal_init();
-  // finish mspgack-rpc initialization
+  // mspgack-rpc initialization
   channel_init();
   terminal_init();
   ui_init();
@@ -366,7 +365,7 @@ int main(int argc, char **argv)
 
   setbuf(stdout, NULL);  // NOLINT(bugprone-unsafe-functions)
 
-  full_screen = !silent_mode;
+  full_screen = !silent_mode || exmode_active;
 
   // Set the default values for the options that use Rows and Columns.
   win_init_size();
@@ -1576,7 +1575,7 @@ static void handle_quickfix(mparm_T *paramp)
 {
   if (paramp->edit_type == EDIT_QF) {
     if (paramp->use_ef != NULL) {
-      set_string_option_direct(kOptErrorfile, paramp->use_ef, 0, SID_CARG);
+      set_option_direct(kOptErrorfile, CSTR_AS_OPTVAL(paramp->use_ef), 0, SID_CARG);
     }
     vim_snprintf(IObuff, IOSIZE, "cfile %s", p_ef);
     if (qf_init(NULL, p_ef, p_efm, true, IObuff, p_menc) < 0) {

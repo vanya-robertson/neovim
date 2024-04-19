@@ -375,7 +375,7 @@ static bool is_executable_in_path(const char *name, char **abspath)
 
     // Combine the $PATH segment with `name`.
     xstrlcpy(buf, p, (size_t)(e - p) + 1);
-    append_path(buf, name, buf_len);
+    (void)append_path(buf, name, buf_len);
 
 #ifdef MSWIN
     if (is_executable_ext(buf, abspath)) {
@@ -789,7 +789,7 @@ void os_copy_xattr(const char *from_file, const char *to_file)
   // get the length of the extended attributes
   ssize_t size = listxattr((char *)from_file, NULL, 0);
   // not supported or no attributes to copy
-  if (errno == ENOTSUP || size <= 0) {
+  if (size <= 0) {
     return;
   }
   char *xattr_buf = xmalloc((size_t)size);

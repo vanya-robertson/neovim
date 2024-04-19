@@ -1,7 +1,7 @@
 --- @brief
 ---
---- \*vim.iter()\* is an interface for |iterable|s: it wraps a table or function argument into an
---- \*Iter\* object with methods (such as |Iter:filter()| and |Iter:map()|) that transform the
+--- [vim.iter()]() is an interface for [iterable]s: it wraps a table or function argument into an
+--- [Iter]() object with methods (such as [Iter:filter()] and [Iter:map()]) that transform the
 --- underlying source data. These methods can be chained to create iterator "pipelines": the output
 --- of each pipeline stage is input to the next stage. The first stage depends on the type passed to
 --- `vim.iter()`:
@@ -60,9 +60,6 @@
 --- vim.iter(rb):totable()
 --- -- { "a", "b" }
 --- ```
----
---- In addition to the |vim.iter()| function, the |vim.iter| module provides
---- convenience functions like |vim.iter.filter()| and |vim.iter.totable()|.
 
 --- LuaLS is bad at generics which this module mostly deals with
 --- @diagnostic disable:no-unknown
@@ -709,7 +706,8 @@ end
 ---@private
 function ListIter:take(n)
   local inc = self._head < self._tail and 1 or -1
-  self._tail = math.min(self._tail, self._head + n * inc)
+  local cmp = self._head < self._tail and math.min or math.max
+  self._tail = cmp(self._tail, self._head + n * inc)
   return self
 end
 
@@ -1089,55 +1087,6 @@ function ListIter.new(t)
   it._tail = #t + 1
   setmetatable(it, ListIter)
   return it
-end
-
---- Collects an |iterable| into a table.
----
---- ```lua
---- -- Equivalent to:
---- vim.iter(f):totable()
---- ```
----
----@param f function Iterator function
----@return table
-function M.totable(f, ...)
-  return Iter.new(f, ...):totable()
-end
-
---- Filters a table or other |iterable|.
----
---- ```lua
---- -- Equivalent to:
---- vim.iter(src):filter(f):totable()
---- ```
----
----@see |Iter:filter()|
----
----@param f fun(...):boolean Filter function. Accepts the current iterator or table values as
----                       arguments and returns true if those values should be kept in the
----                       final table
----@param src table|function Table or iterator function to filter
----@return table
-function M.filter(f, src, ...)
-  return Iter.new(src, ...):filter(f):totable()
-end
-
---- Maps a table or other |iterable|.
----
---- ```lua
---- -- Equivalent to:
---- vim.iter(src):map(f):totable()
---- ```
----
----@see |Iter:map()|
----
----@param f fun(...): any? Map function. Accepts the current iterator or table values as
----                        arguments and returns one or more new values. Nil values are removed
----                        from the final table.
----@param src table|function Table or iterator function to filter
----@return table
-function M.map(f, src, ...)
-  return Iter.new(src, ...):map(f):totable()
 end
 
 return setmetatable(M, {

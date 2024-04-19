@@ -139,6 +139,8 @@ typedef struct {
 #define w_ve_flags w_onebuf_opt.wo_ve_flags  // flags for 'virtualedit'
   OptInt wo_nuw;
 #define w_p_nuw w_onebuf_opt.wo_nuw    // 'numberwidth'
+  int wo_wfb;
+#define w_p_wfb w_onebuf_opt.wo_wfb    // 'winfixbuf'
   int wo_wfh;
 #define w_p_wfh w_onebuf_opt.wo_wfh    // 'winfixheight'
   int wo_wfw;
@@ -458,6 +460,19 @@ struct file_buffer {
   pos_T b_op_end;
 
   bool b_marks_read;            // Have we read ShaDa marks yet?
+
+  bool b_modified_was_set;  ///< did ":set modified"
+  bool b_did_filetype;      ///< FileType event found
+  bool b_keep_filetype;     ///< value for did_filetype when starting
+                            ///< to execute autocommands
+
+  /// Set by the apply_autocmds_group function if the given event is equal to
+  /// EVENT_FILETYPE. Used by the readfile function in order to determine if
+  /// EVENT_BUFREADPOST triggered the EVENT_FILETYPE.
+  ///
+  /// Relying on this value requires one to reset it prior calling
+  /// apply_autocmds_group().
+  bool b_au_did_filetype;
 
   // The following only used in undo.c.
   u_header_T *b_u_oldhead;     // pointer to oldest header

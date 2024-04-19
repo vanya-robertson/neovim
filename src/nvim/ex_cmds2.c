@@ -212,10 +212,24 @@ void dialog_changed(buf_T *buf, bool checkall)
   }
 
   if (ret == VIM_YES) {
-    if (buf->b_fname != NULL
-        && check_overwrite(&ea, buf, buf->b_fname, buf->b_ffname, false) == OK) {
+    bool empty_bufname = buf->b_fname == NULL;
+    if (empty_bufname) {
+      buf_set_name(buf->b_fnum, "Untitled");
+    }
+
+    if (check_overwrite(&ea, buf, buf->b_fname, buf->b_ffname, false) == OK) {
       // didn't hit Cancel
-      buf_write_all(buf, false);
+      if (buf_write_all(buf, false) == OK) {
+        return;
+      }
+    }
+
+    // restore to empty when write failed
+    if (empty_bufname) {
+      XFREE_CLEAR(buf->b_fname);
+      XFREE_CLEAR(buf->b_ffname);
+      XFREE_CLEAR(buf->b_sfname);
+      unchanged(buf, true, false);
     }
   } else if (ret == VIM_NO) {
     unchanged(buf, true, false);
@@ -444,6 +458,30 @@ int buf_write_all(buf_T *buf, bool forceit)
 /// ":argdo", ":windo", ":bufdo", ":tabdo", ":cdo", ":ldo", ":cfdo" and ":lfdo"
 void ex_listdo(exarg_T *eap)
 {
+  if (curwin->w_p_wfb) {
+    if ((eap->cmdidx == CMD_ldo || eap->cmdidx == CMD_lfdo) && !eap->forceit) {
+      // Disallow :ldo if 'winfixbuf' is applied
+      emsg(_(e_winfixbuf_cannot_go_to_buffer));
+      return;
+    }
+
+    if (win_valid(prevwin) && !prevwin->w_p_wfb) {
+      // 'winfixbuf' is set; attempt to change to a window without it.
+      win_goto(prevwin);
+    }
+    if (curwin->w_p_wfb) {
+      // Split the window, which will be 'nowinfixbuf', and set curwin to that
+      (void)win_split(0, 0);
+
+      if (curwin->w_p_wfb) {
+        // Autocommands set 'winfixbuf' or sent us to another window
+        // with it set, or we failed to split the window. Give up.
+        emsg(_(e_winfixbuf_cannot_go_to_buffer));
+        return;
+      }
+    }
+  }
+
   char *save_ei = NULL;
 
   // Temporarily override SHM_OVER and SHM_OVERALL to avoid that file
@@ -582,7 +620,7 @@ void ex_listdo(exarg_T *eap)
       i++;
       // execute the command
       if (execute) {
-        do_cmdline(eap->arg, eap->getline, eap->cookie, DOCMD_VERBOSE + DOCMD_NOWAIT);
+        do_cmdline(eap->arg, eap->ea_getline, eap->cookie, DOCMD_VERBOSE + DOCMD_NOWAIT);
       }
 
       if (eap->cmdidx == CMD_bufdo) {
@@ -630,7 +668,7 @@ void ex_listdo(exarg_T *eap)
       }
 
       if (eap->cmdidx == CMD_windo && execute) {
-        validate_cursor();              // cursor may have moved
+        validate_cursor(curwin);              // cursor may have moved
         // required when 'scrollbind' has been set
         if (curwin->w_p_scb) {
           do_check_scrollbind(true);
@@ -842,11 +880,13 @@ void ex_drop(exarg_T *eap)
         const int save_ar = curbuf->b_p_ar;
 
         // reload the file if it is newer
-        curbuf->b_p_ar = 1;
+        curbuf->b_p_ar = true;
         buf_check_timestamp(curbuf);
         curbuf->b_p_ar = save_ar;
       }
-      ex_rewind(eap);
+      if (curbuf->b_ml.ml_flags & ML_EMPTY) {
+        ex_rewind(eap);
+      }
       return;
     }
   }

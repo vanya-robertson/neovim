@@ -1,32 +1,32 @@
 -- Test suite for testing interactions with API bindings
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.functional.testutil')()
 local Screen = require('test.functional.ui.screen')
 
-local nvim_prog = helpers.nvim_prog
-local fn = helpers.fn
-local api = helpers.api
-local command = helpers.command
-local dedent = helpers.dedent
-local insert = helpers.insert
-local clear = helpers.clear
-local eq = helpers.eq
-local ok = helpers.ok
+local nvim_prog = t.nvim_prog
+local fn = t.fn
+local api = t.api
+local command = t.command
+local dedent = t.dedent
+local insert = t.insert
+local clear = t.clear
+local eq = t.eq
+local ok = t.ok
 local pesc = vim.pesc
-local eval = helpers.eval
-local feed = helpers.feed
-local pcall_err = helpers.pcall_err
-local exec_lua = helpers.exec_lua
-local matches = helpers.matches
-local exec = helpers.exec
+local eval = t.eval
+local feed = t.feed
+local pcall_err = t.pcall_err
+local exec_lua = t.exec_lua
+local matches = t.matches
+local exec = t.exec
 local NIL = vim.NIL
-local retry = helpers.retry
-local next_msg = helpers.next_msg
-local remove_trace = helpers.remove_trace
-local mkdir_p = helpers.mkdir_p
-local rmdir = helpers.rmdir
-local write_file = helpers.write_file
-local poke_eventloop = helpers.poke_eventloop
-local assert_alive = helpers.assert_alive
+local retry = t.retry
+local next_msg = t.next_msg
+local remove_trace = t.remove_trace
+local mkdir_p = t.mkdir_p
+local rmdir = t.rmdir
+local write_file = t.write_file
+local poke_eventloop = t.poke_eventloop
+local assert_alive = t.assert_alive
 
 describe('lua stdlib', function()
   before_each(clear)
@@ -147,10 +147,13 @@ describe('lua stdlib', function()
       end)
 
       it('when plugin = nil', function()
+        local was_removed = (
+          vim.version.ge(current_version, '0.10') and 'was removed' or 'will be removed'
+        )
         eq(
-          dedent [[
+          dedent([[
             foo.bar() is deprecated, use zub.wooo{ok=yay} instead. :help deprecated
-            This feature will be removed in Nvim version 0.10]],
+            Feature %s in Nvim 0.10]]):format(was_removed),
           exec_lua('return vim.deprecate(...)', 'foo.bar()', 'zub.wooo{ok=yay}', '0.10')
         )
         -- Same message, skipped.
@@ -166,7 +169,7 @@ describe('lua stdlib', function()
         eq(
           dedent [[
             foo.hard_dep() is deprecated, use vim.new_api() instead. :help deprecated
-            This feature will be removed in Nvim version 0.11]],
+            Feature will be removed in Nvim 0.11]],
           exec_lua('return vim.deprecate(...)', 'foo.hard_dep()', 'vim.new_api()', '0.11')
         )
 
@@ -174,7 +177,7 @@ describe('lua stdlib', function()
         eq(
           dedent [[
             foo.baz() is deprecated. :help deprecated
-            This feature will be removed in Nvim version 1.0]],
+            Feature will be removed in Nvim 1.0]],
           exec_lua [[ return vim.deprecate('foo.baz()', nil, '1.0') ]]
         )
       end)
@@ -184,7 +187,7 @@ describe('lua stdlib', function()
         eq(
           dedent [[
             foo.bar() is deprecated, use zub.wooo{ok=yay} instead.
-            This feature will be removed in my-plugin.nvim version 0.3.0]],
+            Feature will be removed in my-plugin.nvim 0.3.0]],
           exec_lua(
             'return vim.deprecate(...)',
             'foo.bar()',
@@ -199,7 +202,7 @@ describe('lua stdlib', function()
         eq(
           dedent [[
             foo.bar() is deprecated, use zub.wooo{ok=yay} instead.
-            This feature will be removed in my-plugin.nvim version 0.11.0]],
+            Feature will be removed in my-plugin.nvim 0.11.0]],
           exec_lua(
             'return vim.deprecate(...)',
             'foo.bar()',
@@ -592,8 +595,8 @@ describe('lua stdlib', function()
       { 'x*yz*oo*l', '*', true, false, { 'x', 'yz', 'oo', 'l' } },
     }
 
-    for _, t in ipairs(tests) do
-      eq(t[5], vim.split(t[1], t[2], { plain = t[3], trimempty = t[4] }), t[1])
+    for _, q in ipairs(tests) do
+      eq(q[5], vim.split(q[1], q[2], { plain = q[3], trimempty = q[4] }), q[1])
     end
 
     -- Test old signature
@@ -603,8 +606,8 @@ describe('lua stdlib', function()
       { 'abc', '.-' },
     }
 
-    for _, t in ipairs(loops) do
-      matches('Infinite loop detected', pcall_err(vim.split, t[1], t[2]))
+    for _, q in ipairs(loops) do
+      matches('Infinite loop detected', pcall_err(vim.split, q[1], q[2]))
     end
 
     -- Validates args.
@@ -626,8 +629,8 @@ describe('lua stdlib', function()
       { 'r\n', 'r' },
     }
 
-    for _, t in ipairs(trims) do
-      assert(t[2], trim(t[1]))
+    for _, q in ipairs(trims) do
+      assert(q[2], trim(q[1]))
     end
 
     -- Validates args.
@@ -636,8 +639,8 @@ describe('lua stdlib', function()
 
   it('vim.inspect', function()
     -- just make sure it basically works, it has its own test suite
-    local inspect = function(t, opts)
-      return exec_lua('return vim.inspect(...)', t, opts)
+    local inspect = function(q, opts)
+      return exec_lua('return vim.inspect(...)', q, opts)
     end
 
     eq('2', inspect(2))
@@ -1569,7 +1572,7 @@ describe('lua stdlib', function()
     eq(NIL, exec_lua([[return vim.g.Unknown_script_func]]))
 
     -- Check if autoload works properly
-    local pathsep = helpers.get_pathsep()
+    local pathsep = t.get_pathsep()
     local xconfig = 'Xhome' .. pathsep .. 'Xconfig'
     local xdata = 'Xhome' .. pathsep .. 'Xdata'
     local autoload_folder = table.concat({ xconfig, 'nvim', 'autoload' }, pathsep)
@@ -2016,7 +2019,7 @@ describe('lua stdlib', function()
         vim.opt.scrolloff = 10
         return vim.o.scrolloff
       ]]
-      eq(scrolloff, 10)
+      eq(10, scrolloff)
     end)
 
     pending('should handle STUPID window things', function()
@@ -2037,7 +2040,7 @@ describe('lua stdlib', function()
         vim.opt.wildignore = { 'hello', 'world' }
         return vim.o.wildignore
       ]]
-      eq(wildignore, 'hello,world')
+      eq('hello,world', wildignore)
     end)
 
     it('should allow setting tables with shortnames', function()
@@ -2045,7 +2048,7 @@ describe('lua stdlib', function()
         vim.opt.wig = { 'hello', 'world' }
         return vim.o.wildignore
       ]]
-      eq(wildignore, 'hello,world')
+      eq('hello,world', wildignore)
     end)
 
     it('should error when you attempt to set string values to numeric options', function()
@@ -2451,13 +2454,13 @@ describe('lua stdlib', function()
         vim.opt.wildignore = 'foo'
         return vim.o.wildignore
       ]]
-      eq(wildignore, 'foo')
+      eq('foo', wildignore)
 
       wildignore = exec_lua [[
         vim.opt.wildignore = vim.opt.wildignore + { 'bar', 'baz' }
         return vim.o.wildignore
       ]]
-      eq(wildignore, 'foo,bar,baz')
+      eq('foo,bar,baz', wildignore)
     end)
 
     it('should handle adding duplicates', function()
@@ -2465,19 +2468,19 @@ describe('lua stdlib', function()
         vim.opt.wildignore = 'foo'
         return vim.o.wildignore
       ]]
-      eq(wildignore, 'foo')
+      eq('foo', wildignore)
 
       wildignore = exec_lua [[
         vim.opt.wildignore = vim.opt.wildignore + { 'bar', 'baz' }
         return vim.o.wildignore
       ]]
-      eq(wildignore, 'foo,bar,baz')
+      eq('foo,bar,baz', wildignore)
 
       wildignore = exec_lua [[
         vim.opt.wildignore = vim.opt.wildignore + { 'bar', 'baz' }
         return vim.o.wildignore
       ]]
-      eq(wildignore, 'foo,bar,baz')
+      eq('foo,bar,baz', wildignore)
     end)
 
     it('should allow adding multiple times', function()
@@ -2486,7 +2489,7 @@ describe('lua stdlib', function()
         vim.opt.wildignore = vim.opt.wildignore + 'bar' + 'baz'
         return vim.o.wildignore
       ]]
-      eq(wildignore, 'foo,bar,baz')
+      eq('foo,bar,baz', wildignore)
     end)
 
     it('should remove values when you use minus', function()
@@ -2494,19 +2497,19 @@ describe('lua stdlib', function()
         vim.opt.wildignore = 'foo'
         return vim.o.wildignore
       ]]
-      eq(wildignore, 'foo')
+      eq('foo', wildignore)
 
       wildignore = exec_lua [[
         vim.opt.wildignore = vim.opt.wildignore + { 'bar', 'baz' }
         return vim.o.wildignore
       ]]
-      eq(wildignore, 'foo,bar,baz')
+      eq('foo,bar,baz', wildignore)
 
       wildignore = exec_lua [[
         vim.opt.wildignore = vim.opt.wildignore - 'bar'
         return vim.o.wildignore
       ]]
-      eq(wildignore, 'foo,baz')
+      eq('foo,baz', wildignore)
     end)
 
     it('should prepend values when using ^', function()
@@ -2521,7 +2524,7 @@ describe('lua stdlib', function()
         vim.opt.wildignore = vim.opt.wildignore ^ 'super_first'
         return vim.o.wildignore
       ]]
-      eq(wildignore, 'super_first,first,foo')
+      eq('super_first,first,foo', wildignore)
     end)
 
     it('should not remove duplicates from wildmode: #14708', function()
@@ -2530,7 +2533,7 @@ describe('lua stdlib', function()
         return vim.o.wildmode
       ]]
 
-      eq(wildmode, 'full,list,full')
+      eq('full,list,full', wildmode)
     end)
 
     describe('option types', function()
@@ -2738,7 +2741,7 @@ describe('lua stdlib', function()
           return vim.go.whichwrap
         ]]
 
-        eq(ww, 'b,s')
+        eq('b,s', ww)
         eq(
           'b,s,<,>,[,]',
           exec_lua [[
@@ -3007,25 +3010,65 @@ describe('lua stdlib', function()
   end)
 
   describe('vim.on_key', function()
-    it('tracks keystrokes', function()
+    it('tracks Unicode input', function()
       insert([[hello world ]])
 
       exec_lua [[
         keys = {}
+        typed = {}
 
-        vim.on_key(function(buf)
+        vim.on_key(function(buf, typed_buf)
           if buf:byte() == 27 then
             buf = "<ESC>"
           end
+          if typed_buf:byte() == 27 then
+            typed_buf = "<ESC>"
+          end
 
           table.insert(keys, buf)
+          table.insert(typed, typed_buf)
         end)
       ]]
 
-      insert([[next 🤦 lines å ]])
+      insert([[next 🤦 lines å …]])
 
       -- It has escape in the keys pressed
-      eq('inext 🤦 lines å <ESC>', exec_lua [[return table.concat(keys, '')]])
+      eq('inext 🤦 lines å …<ESC>', exec_lua [[return table.concat(keys, '')]])
+      eq('inext 🤦 lines å …<ESC>', exec_lua [[return table.concat(typed, '')]])
+    end)
+
+    it('tracks input with modifiers', function()
+      exec_lua [[
+        keys = {}
+        typed = {}
+
+        vim.on_key(function(buf, typed_buf)
+          table.insert(keys, vim.fn.keytrans(buf))
+          table.insert(typed, vim.fn.keytrans(typed_buf))
+        end)
+      ]]
+
+      feed([[i<C-V><C-;><C-V><C-…><Esc>]])
+
+      eq('i<C-V><C-;><C-V><C-…><Esc>', exec_lua [[return table.concat(keys, '')]])
+      eq('i<C-V><C-;><C-V><C-…><Esc>', exec_lua [[return table.concat(typed, '')]])
+    end)
+
+    it('works with character find and Select mode', function()
+      insert('12345')
+
+      exec_lua [[
+        typed = {}
+
+        vim.cmd('snoremap # @')
+
+        vim.on_key(function(buf, typed_buf)
+          table.insert(typed, vim.fn.keytrans(typed_buf))
+        end)
+      ]]
+
+      feed('F3gHβγδεζ<Esc>gH…<Esc>gH#$%^')
+      eq('F3gHβγδεζ<Esc>gH…<Esc>gH#$%^', exec_lua [[return table.concat(typed, '')]])
     end)
 
     it('allows removing on_key listeners', function()
@@ -3087,23 +3130,29 @@ describe('lua stdlib', function()
       eq('inext l', exec_lua [[ return table.concat(keys, '') ]])
     end)
 
-    it('processes mapped keys, not unmapped keys', function()
+    it('argument 1 is keys after mapping, argument 2 is typed keys', function()
       exec_lua [[
         keys = {}
+        typed = {}
 
         vim.cmd("inoremap hello world")
 
-        vim.on_key(function(buf)
+        vim.on_key(function(buf, typed_buf)
           if buf:byte() == 27 then
             buf = "<ESC>"
           end
+          if typed_buf:byte() == 27 then
+            typed_buf = "<ESC>"
+          end
 
           table.insert(keys, buf)
+          table.insert(typed, typed_buf)
         end)
       ]]
       insert('hello')
 
       eq('iworld<ESC>', exec_lua [[return table.concat(keys, '')]])
+      eq('ihello<ESC>', exec_lua [[return table.concat(typed, '')]])
     end)
 
     it('can call vim.fn functions on Ctrl-C #17273', function()
@@ -3664,6 +3713,20 @@ describe('lua stdlib', function()
       ]]
       )
     end)
+
+    it('layout in current tabpage does not affect windows in others', function()
+      command('tab split')
+      local t2_move_win = api.nvim_get_current_win()
+      command('vsplit')
+      local t2_other_win = api.nvim_get_current_win()
+      command('tabprevious')
+      matches('E36: Not enough room$', pcall_err(command, 'execute "split|"->repeat(&lines)'))
+      command('vsplit')
+
+      -- Without vim-patch:8.2.3862, this gives E36, despite just the 1st tabpage being full.
+      exec_lua('vim.api.nvim_win_call(..., function() vim.cmd.wincmd "J" end)', t2_move_win)
+      eq({ 'col', { { 'leaf', t2_other_win }, { 'leaf', t2_move_win } } }, fn.winlayout(2))
+    end)
   end)
 
   describe('vim.iconv', function()
@@ -4011,7 +4074,7 @@ describe('vim.keymap', function()
     feed('asdf\n')
 
     eq(1, exec_lua [[return GlobalCount]])
-    eq('\nNo mapping found', helpers.exec_capture('nmap asdf'))
+    eq('\nNo mapping found', t.exec_capture('nmap asdf'))
   end)
 
   it('works with buffer-local mappings', function()
@@ -4035,7 +4098,7 @@ describe('vim.keymap', function()
     feed('asdf\n')
 
     eq(1, exec_lua [[return GlobalCount]])
-    eq('\nNo mapping found', helpers.exec_capture('nmap asdf'))
+    eq('\nNo mapping found', t.exec_capture('nmap asdf'))
   end)
 
   it('does not mutate the opts parameter', function()

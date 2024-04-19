@@ -2,7 +2,7 @@ local api, if_nil = vim.api, vim.F.if_nil
 
 local M = {}
 
---- *diagnostic-structure*
+--- [diagnostic-structure]()
 ---
 --- Diagnostics use the same indexing as the rest of the Nvim API (i.e. 0-based
 --- rows and columns). |api-indexing|
@@ -68,7 +68,7 @@ local M = {}
 ---
 --- Update diagnostics in Insert mode
 --- (if `false`, diagnostics are updated on |InsertLeave|)
---- (default: `false)
+--- (default: `false`)
 --- @field update_in_insert? boolean
 ---
 --- Sort diagnostics by severity. This affects the order in which signs and
@@ -238,6 +238,17 @@ local M = {}
 --- A table mapping |diagnostic-severity| to the highlight group used for the
 --- whole line the sign is placed in.
 --- @field linehl? table<vim.diagnostic.Severity,string>
+
+-- TODO: inherit from `vim.diagnostic.Opts`, implement its fields.
+--- Optional filters |kwargs|, or `nil` for all.
+--- @class vim.diagnostic.Filter
+--- @inlinedoc
+---
+--- Diagnostic namespace, or `nil` for all.
+--- @field ns_id? integer
+---
+--- Buffer number, or 0 for current buffer, or `nil` for all buffers.
+--- @field bufnr? integer
 
 --- @nodoc
 --- @enum vim.diagnostic.Severity
@@ -682,6 +693,13 @@ local function get_diagnostics(bufnr, opts, clamp)
   opts = opts or {}
 
   local namespace = opts.namespace
+
+  if type(namespace) == 'number' then
+    namespace = { namespace }
+  end
+
+  ---@cast namespace integer[]
+
   local diagnostics = {}
 
   -- Memoized results of buf_line_count per bufnr
@@ -742,11 +760,15 @@ local function get_diagnostics(bufnr, opts, clamp)
     end
   elseif bufnr == nil then
     for b, t in pairs(diagnostic_cache) do
-      add_all_diags(b, t[namespace] or {})
+      for _, iter_namespace in ipairs(namespace) do
+        add_all_diags(b, t[iter_namespace] or {})
+      end
     end
   else
     bufnr = get_bufnr(bufnr)
-    add_all_diags(bufnr, diagnostic_cache[bufnr][namespace] or {})
+    for _, iter_namespace in ipairs(namespace) do
+      add_all_diags(bufnr, diagnostic_cache[bufnr][iter_namespace] or {})
+    end
   end
 
   if opts.severity then
@@ -785,7 +807,7 @@ end
 --- @param search_forward boolean
 --- @param bufnr integer
 --- @param opts vim.diagnostic.GotoOpts
---- @param namespace integer
+--- @param namespace integer[]|integer
 --- @return vim.Diagnostic?
 local function next_diagnostic(position, search_forward, bufnr, opts, namespace)
   position[1] = position[1] - 1
@@ -1115,8 +1137,8 @@ end
 --- A table with the following keys:
 --- @class vim.diagnostic.GetOpts
 ---
---- Limit diagnostics to the given namespace.
---- @field namespace? integer
+--- Limit diagnostics to one or more namespaces.
+--- @field namespace? integer[]|integer
 ---
 --- Limit diagnostics to the given line number.
 --- @field lnum? integer
@@ -1481,7 +1503,7 @@ end
 --- diagnostics, use |vim.diagnostic.reset()|.
 ---
 --- To hide diagnostics and prevent them from re-displaying, use
---- |vim.diagnostic.disable()|.
+--- |vim.diagnostic.enable()|.
 ---
 ---@param namespace integer? Diagnostic namespace. When omitted, hide
 ---                          diagnostics from all namespaces.
@@ -1506,25 +1528,32 @@ function M.hide(namespace, bufnr)
   end
 end
 
---- Check whether diagnostics are disabled in a given buffer.
+--- Check whether diagnostics are enabled.
 ---
----@param bufnr integer? Buffer number, or 0 for current buffer.
----@param namespace integer? Diagnostic namespace. When omitted, checks if
----                          all diagnostics are disabled in {bufnr}.
----                          Otherwise, only checks if diagnostics from
----                          {namespace} are disabled.
----@return boolean
-function M.is_disabled(bufnr, namespace)
-  bufnr = get_bufnr(bufnr)
-  if namespace and M.get_namespace(namespace).disabled then
-    return true
+--- @param filter vim.diagnostic.Filter?
+--- @return boolean
+--- @since 12
+function M.is_enabled(filter)
+  filter = filter or {}
+  if filter.ns_id and M.get_namespace(filter.ns_id).disabled then
+    return false
+  elseif filter.bufnr == nil then
+    -- See enable() logic.
+    return vim.tbl_isempty(diagnostic_disabled) and not diagnostic_disabled[1]
   end
 
+  local bufnr = get_bufnr(filter.bufnr)
   if type(diagnostic_disabled[bufnr]) == 'table' then
-    return diagnostic_disabled[bufnr][namespace]
+    return not diagnostic_disabled[bufnr][filter.ns_id]
   end
 
-  return diagnostic_disabled[bufnr] ~= nil
+  return diagnostic_disabled[bufnr] == nil
+end
+
+--- @deprecated use `vim.diagnostic.is_enabled()`
+function M.is_disabled(bufnr, namespace)
+  vim.deprecate('vim.diagnostic.is_disabled()', 'vim.diagnostic.is_enabled()', '0.12', nil, false)
+  return not M.is_enabled { bufnr = bufnr or 0, ns_id = namespace }
 end
 
 --- Display diagnostics for the given namespace and buffer.
@@ -1570,7 +1599,7 @@ function M.show(namespace, bufnr, diagnostics, opts)
     return
   end
 
-  if M.is_disabled(bufnr, namespace) then
+  if not M.is_enabled { bufnr = bufnr or 0, ns_id = namespace } then
     return
   end
 
@@ -1912,71 +1941,103 @@ function M.setloclist(opts)
   set_list(true, opts)
 end
 
---- Disable diagnostics in the given buffer.
----
----@param bufnr integer? Buffer number, or 0 for current buffer. When
----                      omitted, disable diagnostics in all buffers.
----@param namespace integer? Only disable diagnostics for the given namespace.
+--- @deprecated use `vim.diagnostic.enabled(…, false)`
 function M.disable(bufnr, namespace)
-  vim.validate({ bufnr = { bufnr, 'n', true }, namespace = { namespace, 'n', true } })
-  if bufnr == nil then
-    if namespace == nil then
-      -- Disable everything (including as yet non-existing buffers and
-      -- namespaces) by setting diagnostic_disabled to an empty table and set
-      -- its metatable to always return true. This metatable is removed
-      -- in enable()
-      diagnostic_disabled = setmetatable({}, {
-        __index = function()
-          return true
-        end,
-      })
-    else
-      local ns = M.get_namespace(namespace)
-      ns.disabled = true
-    end
-  else
-    bufnr = get_bufnr(bufnr)
-    if namespace == nil then
-      diagnostic_disabled[bufnr] = true
-    else
-      if type(diagnostic_disabled[bufnr]) ~= 'table' then
-        diagnostic_disabled[bufnr] = {}
-      end
-      diagnostic_disabled[bufnr][namespace] = true
-    end
-  end
-
-  M.hide(namespace, bufnr)
+  vim.deprecate(
+    'vim.diagnostic.disable()',
+    'vim.diagnostic.enabled(false, …)',
+    '0.12',
+    nil,
+    false
+  )
+  M.enable(false, { bufnr = bufnr, ns_id = namespace })
 end
 
---- Enable diagnostics in the given buffer.
+--- Enables or disables diagnostics.
 ---
----@param bufnr integer? Buffer number, or 0 for current buffer. When
----                      omitted, enable diagnostics in all buffers.
----@param namespace integer? Only enable diagnostics for the given namespace.
-function M.enable(bufnr, namespace)
-  vim.validate({ bufnr = { bufnr, 'n', true }, namespace = { namespace, 'n', true } })
+--- To "toggle", pass the inverse of `is_enabled()`:
+---
+--- ```lua
+--- vim.diagnostic.enable(not vim.diagnostic.is_enabled())
+--- ```
+---
+--- @param enable (boolean|nil) true/nil to enable, false to disable
+--- @param filter vim.diagnostic.Filter?
+function M.enable(enable, filter)
+  -- Deprecated signature. Drop this in 0.12
+  local legacy = (enable or filter)
+    and vim.tbl_contains({ 'number', 'nil' }, type(enable))
+    and vim.tbl_contains({ 'number', 'nil' }, type(filter))
+
+  if legacy then
+    vim.deprecate(
+      'vim.diagnostic.enable(buf:number, namespace:number)',
+      'vim.diagnostic.enable(enable:boolean, filter:table)',
+      '0.12',
+      nil,
+      false
+    )
+
+    vim.validate({
+      enable = { enable, 'n', true }, -- Legacy `bufnr` arg.
+      filter = { filter, 'n', true }, -- Legacy `namespace` arg.
+    })
+
+    local ns_id = type(filter) == 'number' and filter or nil
+    filter = {}
+    filter.ns_id = ns_id
+    filter.bufnr = type(enable) == 'number' and enable or nil
+    enable = true
+  else
+    filter = filter or {}
+    vim.validate({
+      enable = { enable, 'b', true },
+      filter = { filter, 't', true },
+    })
+  end
+
+  enable = enable == nil and true or enable
+  local bufnr = filter.bufnr
+
   if bufnr == nil then
-    if namespace == nil then
-      -- Enable everything by setting diagnostic_disabled to an empty table
-      diagnostic_disabled = {}
+    if filter.ns_id == nil then
+      diagnostic_disabled = (
+        enable
+          -- Enable everything by setting diagnostic_disabled to an empty table.
+          and {}
+        -- Disable everything (including as yet non-existing buffers and namespaces) by setting
+        -- diagnostic_disabled to an empty table and set its metatable to always return true.
+        or setmetatable({}, {
+          __index = function()
+            return true
+          end,
+        })
+      )
     else
-      local ns = M.get_namespace(namespace)
-      ns.disabled = false
+      local ns = M.get_namespace(filter.ns_id)
+      ns.disabled = not enable
     end
   else
     bufnr = get_bufnr(bufnr)
-    if namespace == nil then
-      diagnostic_disabled[bufnr] = nil
+    if filter.ns_id == nil then
+      diagnostic_disabled[bufnr] = (not enable) and true or nil
     else
       if type(diagnostic_disabled[bufnr]) ~= 'table' then
-        return
+        if enable then
+          return
+        else
+          diagnostic_disabled[bufnr] = {}
+        end
       end
-      diagnostic_disabled[bufnr][namespace] = nil
+      diagnostic_disabled[bufnr][filter.ns_id] = (not enable) and true or nil
     end
   end
 
-  M.show(namespace, bufnr)
+  if enable then
+    M.show(filter.ns_id, bufnr)
+  else
+    M.hide(filter.ns_id, bufnr)
+  end
 end
 
 --- Parse a diagnostic from a string.
