@@ -717,7 +717,7 @@ local function get_diagnostics(bufnr, opts, clamp)
   ---@param b integer
   ---@param d vim.Diagnostic
   local function add(b, d)
-    if not opts.lnum or d.lnum == opts.lnum then
+    if not opts.lnum or (opts.lnum >= d.lnum and opts.lnum <= (d.end_lnum or d.lnum)) then
       if clamp and api.nvim_buf_is_loaded(b) then
         local line_count = buf_line_count[b] - 1
         if
@@ -974,7 +974,7 @@ function M.set(namespace, bufnr, diagnostics, opts)
     bufnr = { bufnr, 'n' },
     diagnostics = {
       diagnostics,
-      vim.tbl_islist,
+      vim.islist,
       'a list of diagnostics',
     },
     opts = { opts, 't', true },
@@ -1140,7 +1140,7 @@ end
 --- Limit diagnostics to one or more namespaces.
 --- @field namespace? integer[]|integer
 ---
---- Limit diagnostics to the given line number.
+--- Limit diagnostics to those spanning the specified line number.
 --- @field lnum? integer
 ---
 --- See |diagnostic-severity|.
@@ -1186,7 +1186,7 @@ M.handlers.signs = {
       bufnr = { bufnr, 'n' },
       diagnostics = {
         diagnostics,
-        vim.tbl_islist,
+        vim.islist,
         'a list of diagnostics',
       },
       opts = { opts, 't', true },
@@ -1309,7 +1309,7 @@ M.handlers.underline = {
       bufnr = { bufnr, 'n' },
       diagnostics = {
         diagnostics,
-        vim.tbl_islist,
+        vim.islist,
         'a list of diagnostics',
       },
       opts = { opts, 't', true },
@@ -1382,7 +1382,7 @@ M.handlers.virtual_text = {
       bufnr = { bufnr, 'n' },
       diagnostics = {
         diagnostics,
-        vim.tbl_islist,
+        vim.islist,
         'a list of diagnostics',
       },
       opts = { opts, 't', true },
@@ -1576,7 +1576,7 @@ function M.show(namespace, bufnr, diagnostics, opts)
     diagnostics = {
       diagnostics,
       function(v)
-        return v == nil or vim.tbl_islist(v)
+        return v == nil or vim.islist(v)
       end,
       'a list of diagnostics',
     },
@@ -1697,7 +1697,7 @@ function M.open_float(opts, ...)
   if scope == 'line' then
     --- @param d vim.Diagnostic
     diagnostics = vim.tbl_filter(function(d)
-      return d.lnum == lnum
+      return lnum >= d.lnum and lnum <= d.end_lnum
     end, diagnostics)
   elseif scope == 'cursor' then
     -- LSP servers can send diagnostics with `end_col` past the length of the line
@@ -2120,7 +2120,7 @@ function M.toqflist(diagnostics)
   vim.validate({
     diagnostics = {
       diagnostics,
-      vim.tbl_islist,
+      vim.islist,
       'a list of diagnostics',
     },
   })
@@ -2160,7 +2160,7 @@ function M.fromqflist(list)
   vim.validate({
     list = {
       list,
-      vim.tbl_islist,
+      vim.islist,
       'a list of quickfix items',
     },
   })

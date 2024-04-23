@@ -1,27 +1,29 @@
-local t = require('test.functional.testutil')()
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
+
 local clear, curbuf, curbuf_contents, curwin, eq, neq, matches, ok, feed, insert, eval =
-  t.clear,
-  t.api.nvim_get_current_buf,
-  t.curbuf_contents,
-  t.api.nvim_get_current_win,
+  n.clear,
+  n.api.nvim_get_current_buf,
+  n.curbuf_contents,
+  n.api.nvim_get_current_win,
   t.eq,
   t.neq,
   t.matches,
   t.ok,
-  t.feed,
-  t.insert,
-  t.eval
-local poke_eventloop = t.poke_eventloop
-local exec = t.exec
-local exec_lua = t.exec_lua
-local fn = t.fn
-local request = t.request
+  n.feed,
+  n.insert,
+  n.eval
+local poke_eventloop = n.poke_eventloop
+local exec = n.exec
+local exec_lua = n.exec_lua
+local fn = n.fn
+local request = n.request
 local NIL = vim.NIL
-local api = t.api
-local command = t.command
+local api = n.api
+local command = n.command
 local pcall_err = t.pcall_err
-local assert_alive = t.assert_alive
+local assert_alive = n.assert_alive
 
 describe('API/win', function()
   before_each(clear)
@@ -136,7 +138,7 @@ describe('API/win', function()
       end)
 
       after_each(function()
-        t.rmdir(topdir .. '/Xacd')
+        n.rmdir(topdir .. '/Xacd')
       end)
 
       it('does not change cwd with non-current window', function()
@@ -257,21 +259,6 @@ describe('API/win', function()
 
       -- curwin didn't change back
       neq(win, curwin())
-
-      -- shows updated position after getchar() #20793
-      feed(':call getchar()<CR>')
-      api.nvim_win_set_cursor(win, { 1, 5 })
-      screen:expect {
-        grid = [[
-                                      |
-        {1:~                             }|*2
-        {2:[No Name]                     }|
-        prolo^gue                      |
-                                      |*2
-        {3:[No Name] [+]                 }|
-        :call getchar()               |
-      ]],
-      }
     end)
 
     it('remembers what column it wants to be in', function()
@@ -1385,7 +1372,7 @@ describe('API/win', function()
       local tab1 = api.nvim_get_current_tabpage()
       local tab1_win = api.nvim_get_current_win()
 
-      t.command('tabnew')
+      n.command('tabnew')
       local tab2 = api.nvim_get_current_tabpage()
       local tab2_win = api.nvim_get_current_win()
 
@@ -1805,7 +1792,7 @@ describe('API/win', function()
       end)
 
       after_each(function()
-        t.rmdir(topdir .. '/Xacd')
+        n.rmdir(topdir .. '/Xacd')
       end)
 
       it('does not change cwd with enter=false #15280', function()

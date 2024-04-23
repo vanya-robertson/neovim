@@ -1,32 +1,33 @@
 -- Test suite for testing interactions with API bindings
-local t = require('test.functional.testutil')()
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
 
-local nvim_prog = t.nvim_prog
-local fn = t.fn
-local api = t.api
-local command = t.command
+local nvim_prog = n.nvim_prog
+local fn = n.fn
+local api = n.api
+local command = n.command
 local dedent = t.dedent
-local insert = t.insert
-local clear = t.clear
+local insert = n.insert
+local clear = n.clear
 local eq = t.eq
 local ok = t.ok
 local pesc = vim.pesc
-local eval = t.eval
-local feed = t.feed
+local eval = n.eval
+local feed = n.feed
 local pcall_err = t.pcall_err
-local exec_lua = t.exec_lua
+local exec_lua = n.exec_lua
 local matches = t.matches
-local exec = t.exec
+local exec = n.exec
 local NIL = vim.NIL
 local retry = t.retry
-local next_msg = t.next_msg
+local next_msg = n.next_msg
 local remove_trace = t.remove_trace
-local mkdir_p = t.mkdir_p
-local rmdir = t.rmdir
+local mkdir_p = n.mkdir_p
+local rmdir = n.rmdir
 local write_file = t.write_file
-local poke_eventloop = t.poke_eventloop
-local assert_alive = t.assert_alive
+local poke_eventloop = n.poke_eventloop
+local assert_alive = n.assert_alive
 
 describe('lua stdlib', function()
   before_each(clear)
@@ -147,8 +148,10 @@ describe('lua stdlib', function()
       end)
 
       it('when plugin = nil', function()
+        local cur = vim.version.parse(current_version)
+        local cur_to_compare = cur.major .. '.' .. cur.minor
         local was_removed = (
-          vim.version.ge(current_version, '0.10') and 'was removed' or 'will be removed'
+          vim.version.ge(cur_to_compare, '0.10') and 'was removed' or 'will be removed'
         )
         eq(
           dedent([[
@@ -673,21 +676,21 @@ describe('lua stdlib', function()
       local a = {}
       local b = vim.deepcopy(a)
 
-      return vim.tbl_islist(b) and vim.tbl_count(b) == 0 and tostring(a) ~= tostring(b)
+      return vim.islist(b) and vim.tbl_count(b) == 0 and tostring(a) ~= tostring(b)
     ]]))
 
     ok(exec_lua([[
       local a = vim.empty_dict()
       local b = vim.deepcopy(a)
 
-      return not vim.tbl_islist(b) and vim.tbl_count(b) == 0
+      return not vim.islist(b) and vim.tbl_count(b) == 0
     ]]))
 
     ok(exec_lua([[
       local a = {x = vim.empty_dict(), y = {}}
       local b = vim.deepcopy(a)
 
-      return not vim.tbl_islist(b.x) and vim.tbl_islist(b.y)
+      return not vim.islist(b.x) and vim.islist(b.y)
         and vim.tbl_count(b) == 2
         and tostring(a) ~= tostring(b)
     ]]))
@@ -825,30 +828,30 @@ describe('lua stdlib', function()
     )
   end)
 
-  it('vim.tbl_isarray', function()
-    eq(true, exec_lua('return vim.tbl_isarray({})'))
-    eq(false, exec_lua('return vim.tbl_isarray(vim.empty_dict())'))
-    eq(true, exec_lua("return vim.tbl_isarray({'a', 'b', 'c'})"))
-    eq(false, exec_lua("return vim.tbl_isarray({'a', '32', a='hello', b='baz'})"))
-    eq(false, exec_lua("return vim.tbl_isarray({1, a='hello', b='baz'})"))
-    eq(false, exec_lua("return vim.tbl_isarray({a='hello', b='baz', 1})"))
-    eq(false, exec_lua("return vim.tbl_isarray({1, 2, nil, a='hello'})"))
-    eq(true, exec_lua('return vim.tbl_isarray({1, 2, nil, 4})'))
-    eq(true, exec_lua('return vim.tbl_isarray({nil, 2, 3, 4})'))
-    eq(false, exec_lua('return vim.tbl_isarray({1, [1.5]=2, [3]=3})'))
+  it('vim.isarray', function()
+    eq(true, exec_lua('return vim.isarray({})'))
+    eq(false, exec_lua('return vim.isarray(vim.empty_dict())'))
+    eq(true, exec_lua("return vim.isarray({'a', 'b', 'c'})"))
+    eq(false, exec_lua("return vim.isarray({'a', '32', a='hello', b='baz'})"))
+    eq(false, exec_lua("return vim.isarray({1, a='hello', b='baz'})"))
+    eq(false, exec_lua("return vim.isarray({a='hello', b='baz', 1})"))
+    eq(false, exec_lua("return vim.isarray({1, 2, nil, a='hello'})"))
+    eq(true, exec_lua('return vim.isarray({1, 2, nil, 4})'))
+    eq(true, exec_lua('return vim.isarray({nil, 2, 3, 4})'))
+    eq(false, exec_lua('return vim.isarray({1, [1.5]=2, [3]=3})'))
   end)
 
-  it('vim.tbl_islist', function()
-    eq(true, exec_lua('return vim.tbl_islist({})'))
-    eq(false, exec_lua('return vim.tbl_islist(vim.empty_dict())'))
-    eq(true, exec_lua("return vim.tbl_islist({'a', 'b', 'c'})"))
-    eq(false, exec_lua("return vim.tbl_islist({'a', '32', a='hello', b='baz'})"))
-    eq(false, exec_lua("return vim.tbl_islist({1, a='hello', b='baz'})"))
-    eq(false, exec_lua("return vim.tbl_islist({a='hello', b='baz', 1})"))
-    eq(false, exec_lua("return vim.tbl_islist({1, 2, nil, a='hello'})"))
-    eq(false, exec_lua('return vim.tbl_islist({1, 2, nil, 4})'))
-    eq(false, exec_lua('return vim.tbl_islist({nil, 2, 3, 4})'))
-    eq(false, exec_lua('return vim.tbl_islist({1, [1.5]=2, [3]=3})'))
+  it('vim.islist', function()
+    eq(true, exec_lua('return vim.islist({})'))
+    eq(false, exec_lua('return vim.islist(vim.empty_dict())'))
+    eq(true, exec_lua("return vim.islist({'a', 'b', 'c'})"))
+    eq(false, exec_lua("return vim.islist({'a', '32', a='hello', b='baz'})"))
+    eq(false, exec_lua("return vim.islist({1, a='hello', b='baz'})"))
+    eq(false, exec_lua("return vim.islist({a='hello', b='baz', 1})"))
+    eq(false, exec_lua("return vim.islist({1, 2, nil, a='hello'})"))
+    eq(false, exec_lua('return vim.islist({1, 2, nil, 4})'))
+    eq(false, exec_lua('return vim.islist({nil, 2, 3, 4})'))
+    eq(false, exec_lua('return vim.islist({1, [1.5]=2, [3]=3})'))
   end)
 
   it('vim.tbl_isempty', function()
@@ -921,7 +924,7 @@ describe('lua stdlib', function()
       local b = {}
       local c = vim.tbl_extend("keep", a, b)
 
-      return not vim.tbl_islist(c) and vim.tbl_count(c) == 0
+      return not vim.islist(c) and vim.tbl_count(c) == 0
     ]]))
 
     ok(exec_lua([[
@@ -929,7 +932,7 @@ describe('lua stdlib', function()
       local b = vim.empty_dict()
       local c = vim.tbl_extend("keep", a, b)
 
-      return vim.tbl_islist(c) and vim.tbl_count(c) == 0
+      return vim.islist(c) and vim.tbl_count(c) == 0
     ]]))
 
     ok(exec_lua([[
@@ -1029,7 +1032,7 @@ describe('lua stdlib', function()
       local count = 0
       for _ in pairs(c) do count = count + 1 end
 
-      return not vim.tbl_islist(c) and count == 0
+      return not vim.islist(c) and count == 0
     ]]))
 
     ok(exec_lua([[
@@ -1040,7 +1043,7 @@ describe('lua stdlib', function()
       local count = 0
       for _ in pairs(c) do count = count + 1 end
 
-      return vim.tbl_islist(c) and count == 0
+      return vim.islist(c) and count == 0
     ]]))
 
     eq(
@@ -1285,7 +1288,7 @@ describe('lua stdlib', function()
       vim.rpcrequest(chan, 'nvim_exec', 'let xx = {}\nlet yy = []', false)
       local dict = vim.rpcrequest(chan, 'nvim_eval', 'xx')
       local list = vim.rpcrequest(chan, 'nvim_eval', 'yy')
-      return {dict, list, vim.tbl_islist(dict), vim.tbl_islist(list)}
+      return {dict, list, vim.islist(dict), vim.islist(list)}
      ]])
     )
 
@@ -1358,7 +1361,7 @@ describe('lua stdlib', function()
       vim.api.nvim_set_var('dicty', vim.empty_dict())
       local listy = vim.fn.eval("listy")
       local dicty = vim.fn.eval("dicty")
-      return {vim.tbl_islist(listy), vim.tbl_islist(dicty), next(listy) == nil, next(dicty) == nil}
+      return {vim.islist(listy), vim.islist(dicty), next(listy) == nil, next(dicty) == nil}
     ]])
     )
 
@@ -1572,7 +1575,7 @@ describe('lua stdlib', function()
     eq(NIL, exec_lua([[return vim.g.Unknown_script_func]]))
 
     -- Check if autoload works properly
-    local pathsep = t.get_pathsep()
+    local pathsep = n.get_pathsep()
     local xconfig = 'Xhome' .. pathsep .. 'Xconfig'
     local xdata = 'Xhome' .. pathsep .. 'Xdata'
     local autoload_folder = table.concat({ xconfig, 'nvim', 'autoload' }, pathsep)
@@ -4074,7 +4077,7 @@ describe('vim.keymap', function()
     feed('asdf\n')
 
     eq(1, exec_lua [[return GlobalCount]])
-    eq('\nNo mapping found', t.exec_capture('nmap asdf'))
+    eq('\nNo mapping found', n.exec_capture('nmap asdf'))
   end)
 
   it('works with buffer-local mappings', function()
@@ -4098,7 +4101,7 @@ describe('vim.keymap', function()
     feed('asdf\n')
 
     eq(1, exec_lua [[return GlobalCount]])
-    eq('\nNo mapping found', t.exec_capture('nmap asdf'))
+    eq('\nNo mapping found', n.exec_capture('nmap asdf'))
   end)
 
   it('does not mutate the opts parameter', function()

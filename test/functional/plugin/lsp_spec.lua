@@ -1,26 +1,28 @@
-local t = require('test.functional.testutil')()
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
+
 local t_lsp = require('test.functional.plugin.lsp.testutil')
 
 local assert_log = t.assert_log
-local buf_lines = t.buf_lines
-local clear = t.clear
-local command = t.command
+local buf_lines = n.buf_lines
+local clear = n.clear
+local command = n.command
 local dedent = t.dedent
-local exec_lua = t.exec_lua
+local exec_lua = n.exec_lua
 local eq = t.eq
-local eval = t.eval
+local eval = n.eval
 local matches = t.matches
 local pcall_err = t.pcall_err
 local pesc = vim.pesc
-local insert = t.insert
-local fn = t.fn
+local insert = n.insert
+local fn = n.fn
 local retry = t.retry
-local stop = t.stop
+local stop = n.stop
 local NIL = vim.NIL
 local read_file = t.read_file
 local write_file = t.write_file
 local is_ci = t.is_ci
-local api = t.api
+local api = n.api
 local is_os = t.is_os
 local skip = t.skip
 local mkdir = t.mkdir
@@ -1481,7 +1483,7 @@ describe('LSP', function()
         end,
         on_handler = function(err, result, ctx)
           if ctx.method == 'start' then
-            t.command('normal! 1Go')
+            n.command('normal! 1Go')
             client.notify('finish')
           end
           eq(table.remove(expected_handlers), { err, result, ctx }, 'expected handler')
@@ -2368,7 +2370,7 @@ describe('LSP', function()
   end)
 
   describe('lsp.util.rename', function()
-    local pathsep = t.get_pathsep()
+    local pathsep = n.get_pathsep()
 
     it('Can rename an existing file', function()
       local old = tmpname()
@@ -2404,7 +2406,7 @@ describe('LSP', function()
       os.remove(old_dir)
       os.remove(new_dir)
 
-      t.mkdir_p(old_dir)
+      n.mkdir_p(old_dir)
 
       local file = 'file.txt'
       write_file(old_dir .. pathsep .. file, 'Test content')
@@ -2440,7 +2442,7 @@ describe('LSP', function()
       local new = tmpname()
       os.remove(old)
       os.remove(new)
-      t.mkdir_p(old)
+      n.mkdir_p(old)
 
       local result = exec_lua(
         [[
@@ -3457,6 +3459,442 @@ describe('LSP', function()
         },
       }
 
+      eq(expected, qflist)
+    end)
+  end)
+
+  describe('vim.lsp.buf.typehierarchy subtypes', function()
+    it('does nothing for an empty response', function()
+      local qflist_count = exec_lua([=[
+        require'vim.lsp.handlers'['typeHierarchy/subtypes'](nil, nil, {})
+        return #vim.fn.getqflist()
+      ]=])
+      eq(0, qflist_count)
+    end)
+
+    it('opens the quickfix list with the right subtypes', function()
+      clear()
+      exec_lua(create_server_definition)
+      local qflist = exec_lua([=[
+        local clangd_response = { {
+          data = {
+            parents = { {
+              parents = { {
+                parents = { {
+                  parents = {},
+                  symbolID = "62B3D268A01B9978"
+                } },
+                symbolID = "DC9B0AD433B43BEC"
+              } },
+              symbolID = "06B5F6A19BA9F6A8"
+            } },
+            symbolID = "EDC336589C09ABB2"
+          },
+          kind = 5,
+          name = "D2",
+          range = {
+            ["end"] = {
+              character = 8,
+              line = 9
+            },
+            start = {
+              character = 6,
+              line = 9
+            }
+          },
+          selectionRange = {
+            ["end"] = {
+              character = 8,
+              line = 9
+            },
+            start = {
+              character = 6,
+              line = 9
+            }
+          },
+          uri = "file:///home/jiangyinzuo/hello.cpp"
+        }, {
+          data = {
+            parents = { {
+              parents = { {
+                parents = { {
+                  parents = {},
+                  symbolID = "62B3D268A01B9978"
+                } },
+                symbolID = "DC9B0AD433B43BEC"
+              } },
+              symbolID = "06B5F6A19BA9F6A8"
+            } },
+            symbolID = "AFFCAED15557EF08"
+          },
+          kind = 5,
+          name = "D1",
+          range = {
+            ["end"] = {
+              character = 8,
+              line = 8
+            },
+            start = {
+              character = 6,
+              line = 8
+            }
+          },
+          selectionRange = {
+            ["end"] = {
+              character = 8,
+              line = 8
+            },
+            start = {
+              character = 6,
+              line = 8
+            }
+          },
+          uri = "file:///home/jiangyinzuo/hello.cpp"
+        } }
+
+        local server = _create_server({
+          capabilities = {
+            positionEncoding = "utf-8"
+          },
+        })
+        local client_id = vim.lsp.start({ name = 'dummy', cmd = server.cmd })
+        local handler = require'vim.lsp.handlers'['typeHierarchy/subtypes']
+        handler(nil, clangd_response, { client_id = client_id, bufnr = 1 })
+        return vim.fn.getqflist()
+      ]=])
+
+      local expected = {
+        {
+          bufnr = 2,
+          col = 7,
+          end_col = 0,
+          end_lnum = 0,
+          lnum = 10,
+          module = '',
+          nr = 0,
+          pattern = '',
+          text = 'D2',
+          type = '',
+          valid = 1,
+          vcol = 0,
+        },
+        {
+          bufnr = 2,
+          col = 7,
+          end_col = 0,
+          end_lnum = 0,
+          lnum = 9,
+          module = '',
+          nr = 0,
+          pattern = '',
+          text = 'D1',
+          type = '',
+          valid = 1,
+          vcol = 0,
+        },
+      }
+
+      eq(expected, qflist)
+    end)
+
+    it('opens the quickfix list with the right subtypes and details', function()
+      clear()
+      exec_lua(create_server_definition)
+      local qflist = exec_lua([=[
+        local jdtls_response = {
+          {
+            data = { element = '=hello-java_ed323c3c/_<{Main.java[Main[A' },
+            detail = '',
+            kind = 5,
+            name = 'A',
+            range = {
+              ['end'] = { character = 26, line = 3 },
+              start = { character = 1, line = 3 },
+            },
+            selectionRange = {
+              ['end'] = { character = 8, line = 3 },
+              start = { character = 7, line = 3 },
+            },
+            tags = {},
+            uri = 'file:///home/jiangyinzuo/hello-java/Main.java',
+          },
+          {
+            data = { element = '=hello-java_ed323c3c/_<mylist{MyList.java[MyList[Inner' },
+            detail = 'mylist',
+            kind = 5,
+            name = 'MyList$Inner',
+            range = {
+              ['end'] = { character = 37, line = 3 },
+              start = { character = 1, line = 3 },
+            },
+            selectionRange = {
+              ['end'] = { character = 19, line = 3 },
+              start = { character = 14, line = 3 },
+            },
+            tags = {},
+            uri = 'file:///home/jiangyinzuo/hello-java/mylist/MyList.java',
+          },
+        }
+
+        local server = _create_server({
+          capabilities = {
+            positionEncoding = "utf-8"
+          },
+        })
+        local client_id = vim.lsp.start({ name = 'dummy', cmd = server.cmd })
+        local handler = require'vim.lsp.handlers'['typeHierarchy/subtypes']
+        handler(nil, jdtls_response, { client_id = client_id, bufnr = 1 })
+        return vim.fn.getqflist()
+      ]=])
+
+      local expected = {
+        {
+          bufnr = 2,
+          col = 2,
+          end_col = 0,
+          end_lnum = 0,
+          lnum = 4,
+          module = '',
+          nr = 0,
+          pattern = '',
+          text = 'A',
+          type = '',
+          valid = 1,
+          vcol = 0,
+        },
+        {
+          bufnr = 3,
+          col = 2,
+          end_col = 0,
+          end_lnum = 0,
+          lnum = 4,
+          module = '',
+          nr = 0,
+          pattern = '',
+          text = 'MyList$Inner mylist',
+          type = '',
+          valid = 1,
+          vcol = 0,
+        },
+      }
+      eq(expected, qflist)
+    end)
+  end)
+
+  describe('vim.lsp.buf.typehierarchy supertypes', function()
+    it('does nothing for an empty response', function()
+      local qflist_count = exec_lua([=[
+        require'vim.lsp.handlers'['typeHierarchy/supertypes'](nil, nil, {})
+        return #vim.fn.getqflist()
+      ]=])
+      eq(0, qflist_count)
+    end)
+
+    it('opens the quickfix list with the right supertypes', function()
+      clear()
+      exec_lua(create_server_definition)
+      local qflist = exec_lua([=[
+        local clangd_response = { {
+          data = {
+            parents = { {
+              parents = { {
+                parents = { {
+                  parents = {},
+                  symbolID = "62B3D268A01B9978"
+                } },
+                symbolID = "DC9B0AD433B43BEC"
+              } },
+              symbolID = "06B5F6A19BA9F6A8"
+            } },
+            symbolID = "EDC336589C09ABB2"
+          },
+          kind = 5,
+          name = "D2",
+          range = {
+            ["end"] = {
+              character = 8,
+              line = 9
+            },
+            start = {
+              character = 6,
+              line = 9
+            }
+          },
+          selectionRange = {
+            ["end"] = {
+              character = 8,
+              line = 9
+            },
+            start = {
+              character = 6,
+              line = 9
+            }
+          },
+          uri = "file:///home/jiangyinzuo/hello.cpp"
+        }, {
+          data = {
+            parents = { {
+              parents = { {
+                parents = { {
+                  parents = {},
+                  symbolID = "62B3D268A01B9978"
+                } },
+                symbolID = "DC9B0AD433B43BEC"
+              } },
+              symbolID = "06B5F6A19BA9F6A8"
+            } },
+            symbolID = "AFFCAED15557EF08"
+          },
+          kind = 5,
+          name = "D1",
+          range = {
+            ["end"] = {
+              character = 8,
+              line = 8
+            },
+            start = {
+              character = 6,
+              line = 8
+            }
+          },
+          selectionRange = {
+            ["end"] = {
+              character = 8,
+              line = 8
+            },
+            start = {
+              character = 6,
+              line = 8
+            }
+          },
+          uri = "file:///home/jiangyinzuo/hello.cpp"
+        } }
+
+        local server = _create_server({
+          capabilities = {
+            positionEncoding = "utf-8"
+          },
+        })
+        local client_id = vim.lsp.start({ name = 'dummy', cmd = server.cmd })
+        local handler = require'vim.lsp.handlers'['typeHierarchy/supertypes']
+        handler(nil, clangd_response, { client_id = client_id, bufnr = 1 })
+        return vim.fn.getqflist()
+      ]=])
+
+      local expected = {
+        {
+          bufnr = 2,
+          col = 7,
+          end_col = 0,
+          end_lnum = 0,
+          lnum = 10,
+          module = '',
+          nr = 0,
+          pattern = '',
+          text = 'D2',
+          type = '',
+          valid = 1,
+          vcol = 0,
+        },
+        {
+          bufnr = 2,
+          col = 7,
+          end_col = 0,
+          end_lnum = 0,
+          lnum = 9,
+          module = '',
+          nr = 0,
+          pattern = '',
+          text = 'D1',
+          type = '',
+          valid = 1,
+          vcol = 0,
+        },
+      }
+
+      eq(expected, qflist)
+    end)
+
+    it('opens the quickfix list with the right supertypes and details', function()
+      clear()
+      exec_lua(create_server_definition)
+      local qflist = exec_lua([=[
+        local jdtls_response = {
+          {
+            data = { element = '=hello-java_ed323c3c/_<{Main.java[Main[A' },
+            detail = '',
+            kind = 5,
+            name = 'A',
+            range = {
+              ['end'] = { character = 26, line = 3 },
+              start = { character = 1, line = 3 },
+            },
+            selectionRange = {
+              ['end'] = { character = 8, line = 3 },
+              start = { character = 7, line = 3 },
+            },
+            tags = {},
+            uri = 'file:///home/jiangyinzuo/hello-java/Main.java',
+          },
+          {
+            data = { element = '=hello-java_ed323c3c/_<mylist{MyList.java[MyList[Inner' },
+            detail = 'mylist',
+            kind = 5,
+            name = 'MyList$Inner',
+            range = {
+              ['end'] = { character = 37, line = 3 },
+              start = { character = 1, line = 3 },
+            },
+            selectionRange = {
+              ['end'] = { character = 19, line = 3 },
+              start = { character = 14, line = 3 },
+            },
+            tags = {},
+            uri = 'file:///home/jiangyinzuo/hello-java/mylist/MyList.java',
+          },
+        }
+
+        local server = _create_server({
+          capabilities = {
+            positionEncoding = "utf-8"
+          },
+        })
+        local client_id = vim.lsp.start({ name = 'dummy', cmd = server.cmd })
+        local handler = require'vim.lsp.handlers'['typeHierarchy/supertypes']
+        handler(nil, jdtls_response, { client_id = client_id, bufnr = 1 })
+        return vim.fn.getqflist()
+      ]=])
+
+      local expected = {
+        {
+          bufnr = 2,
+          col = 2,
+          end_col = 0,
+          end_lnum = 0,
+          lnum = 4,
+          module = '',
+          nr = 0,
+          pattern = '',
+          text = 'A',
+          type = '',
+          valid = 1,
+          vcol = 0,
+        },
+        {
+          bufnr = 3,
+          col = 2,
+          end_col = 0,
+          end_lnum = 0,
+          lnum = 4,
+          module = '',
+          nr = 0,
+          pattern = '',
+          text = 'MyList$Inner mylist',
+          type = '',
+          valid = 1,
+          vcol = 0,
+        },
+      }
       eq(expected, qflist)
     end)
   end)
