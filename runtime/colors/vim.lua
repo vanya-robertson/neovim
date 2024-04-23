@@ -27,7 +27,7 @@ end
 -- General
 hi('Normal', {})
 
-hi('Conceal',      { fg = 'LightGrey', bg = 'DarkGrey', ctermfg = 'LightGrey', ctermbg = 'DarkGrey' })
+hi('Conceal',      { fg = 'LightGrey', bg = '', ctermfg = 'LightGrey', ctermbg = '' })
 hi('Cursor',       {})
 hi('lCursor',      {})
 hi('DiffText',     { bg = 'Red', bold = true,           ctermbg = 'Red', cterm = { bold = true } })
