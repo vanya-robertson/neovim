@@ -14,21 +14,21 @@ scriptencoding utf-8
 let s:cpo_save = &cpo
 set cpo&vim
 
-" Configuration: {{{1
+" Configuration: 
 "
-" use conceal? {{{2
+" use conceal? 
 if !exists('g:pandoc#syntax#conceal#use')
     let g:pandoc#syntax#conceal#use = 1
 endif
-"}}}2
 
-" what groups not to use conceal in. works as a blacklist {{{2
+
+" what groups not to use conceal in. works as a blacklist 
 if !exists('g:pandoc#syntax#conceal#blacklist')
     let g:pandoc#syntax#conceal#blacklist = []
 endif
-" }}}2
+" 
 
-" cchars used in conceal rules {{{2
+" cchars used in conceal rules 
 " utf-8 defaults (preferred)
 if &encoding ==# 'utf-8'
     let s:cchars = {
@@ -66,44 +66,44 @@ else
                 \'html_c_s': '+',
                 \'html_c_e': '+'}
 endif
-" }}}2
+" 
 
-" if the user has a dictionary with replacements for the default cchars, use those {{{2
+" if the user has a dictionary with replacements for the default cchars, use those {{{}}}{{{}}}
 if exists('g:pandoc#syntax#conceal#cchar_overrides')
     let s:cchars = extend(s:cchars, g:pandoc#syntax#conceal#cchar_overrides)
 endif
-" }}}2
+" 
 
-"should the urls in links be concealed? {{{2
+"should the urls in links be concealed? 
 if !exists('g:pandoc#syntax#conceal#urls')
     let g:pandoc#syntax#conceal#urls = 0
 endif
-" should backslashes in escapes be concealed? {{{2
+" should backslashes in escapes be concealed? 
 if !exists('g:pandoc#syntax#conceal#backslash')
     let g:pandoc#syntax#conceal#backslash = 0
 endif
-" }}}2
+" 
 
-" leave specified codeblocks as Normal (i.e. 'unhighlighted') {{{2
+" leave specified codeblocks as Normal (i.e. 'unhighlighted') 
 if !exists('g:pandoc#syntax#codeblocks#ignore')
     let g:pandoc#syntax#codeblocks#ignore = []
 endif
-" }}}2
+" 
 
-" use embedded highlighting for delimited codeblocks where a language is specifed. {{{2
+" use embedded highlighting for delimited codeblocks where a language is specifed. 
 if !exists('g:pandoc#syntax#codeblocks#embeds#use')
     let g:pandoc#syntax#codeblocks#embeds#use = 1
 endif
-" }}}2
+" 
 
-" for what languages and using what vim syntax files highlight those embeds. {{{2
+" for what languages and using what vim syntax files highlight those embeds. 
 " defaults to None.
 if !exists('g:pandoc#syntax#codeblocks#embeds#langs')
     let g:pandoc#syntax#codeblocks#embeds#langs = []
 endif
-" }}}2
+" 
 
-" use italics ? {{{2
+" use italics ? 
 if !exists('g:pandoc#syntax#style#emphases')
     let g:pandoc#syntax#style#emphases = 1
 endif
@@ -112,48 +112,48 @@ endif
 if g:pandoc#syntax#style#emphases == 0
     call add(g:pandoc#syntax#conceal#blacklist, 'block')
 endif
-" }}}2
+" 
 
-" underline subscript, superscript and strikeout? {{{2
+" underline subscript, superscript and strikeout? 
 if !exists('g:pandoc#syntax#style#underline_special')
     let g:pandoc#syntax#style#underline_special = 1
 endif
-" }}}2
+" 
 
-" protect code blocks? {{{2
+" protect code blocks? 
 if !exists('g:pandoc#syntax#protect#codeblocks')
     let g:pandoc#syntax#protect#codeblocks = 1
 endif
-" }}}2
+" 
 
-" use color column? {{{2
+" use color column? 
 if !exists('g:pandoc#syntax#colorcolumn')
     let g:pandoc#syntax#colorcolumn = 0
 endif
-" }}}2
+" 
 
-" highlight new lines? {{{2
+" highlight new lines? 
 if !exists('g:pandoc#syntax#newlines')
     let g:pandoc#syntax#newlines = 1
 endif
-" }}}
+" 
 
-" detect roman-numeral list items? {{{2
+" detect roman-numeral list items? 
 if !exists('g:pandoc#syntax#roman_lists')
     let g:pandoc#syntax#roman_lists = 0
 endif
-" }}}2
+" 
 
-" disable syntax highlighting for definition lists? (better performances) {{{2
+" disable syntax highlighting for definition lists? (better performances) 
 if !exists('g:pandoc#syntax#use_definition_lists')
     let g:pandoc#syntax#use_definition_lists = 1
 endif
-" }}}2
+" 
 
-" }}}1
+" 
 
-" Functions: {{{1
-" EnableEmbedsforCodeblocksWithLang {{{2
+" Functions: 
+" EnableEmbedsforCodeblocksWithLang 
 function! EnableEmbedsforCodeblocksWithLang(entry)
     " prevent embedded language syntaxes from changing 'foldmethod' 
     if has('folding')
@@ -187,9 +187,9 @@ function! EnableEmbedsforCodeblocksWithLang(entry)
         let &l:foldtext = s:foldtext
     endif
 endfunction
-" }}}2
+" 
 
-" DisableEmbedsforCodeblocksWithLang {{{2
+" DisableEmbedsforCodeblocksWithLang 
 function! DisableEmbedsforCodeblocksWithLang(langname)
     try
       exe 'syn clear pandocDelimitedCodeBlock_'.a:langname
@@ -198,9 +198,9 @@ function! DisableEmbedsforCodeblocksWithLang(langname)
       echo "No existing highlight definitions found for '" . a:langname . "'"
     endtry
 endfunction
-" }}}2
+" 
 
-" WithConceal {{{2
+" WithConceal 
 function! s:WithConceal(rule_group, rule, conceal_rule)
     let l:rule_tail = ''
     if g:pandoc#syntax#conceal#use != 0
@@ -210,11 +210,11 @@ function! s:WithConceal(rule_group, rule, conceal_rule)
     endif
     execute a:rule . l:rule_tail
 endfunction
-" }}}2
+" 
 
-" }}}1
+" 
 
-" Commands: {{{1
+" Commands: 
 command! -buffer -nargs=1 -complete=syntax PandocHighlight call EnableEmbedsforCodeblocksWithLang(<f-args>)
 command! -buffer -nargs=1 -complete=syntax PandocUnhighlight call DisableEmbedsforCodeblocksWithLang(<f-args>)
 " }}}1
@@ -222,18 +222,18 @@ command! -buffer -nargs=1 -complete=syntax PandocUnhighlight call DisableEmbedsf
 " BASE:
 syntax clear
 syntax spell toplevel
-" }}}1
+" 
 
-" Syntax Rules: {{{1
+" Syntax Rules: 
 
-" Embeds: {{{2
+" Embeds: 
 
 " prevent embedded language syntaxes from changing 'foldmethod' 
 if has('folding')
     let s:foldmethod = &l:foldmethod
 endif
 
-" HTML: {{{3
+" HTML: 
 " Set embedded HTML highlighting
 syn include @HTML syntax/html.vim
 syn match pandocHTML /<\/\?\a\_.\{-}>/ contains=@HTML
@@ -241,9 +241,9 @@ syn match pandocHTML /<\/\?\a\_.\{-}>/ contains=@HTML
 syn region pandocHTMLComment start=/<!--\s\=/ end=/\s\=-->/ keepend contains=pandocHTMLCommentStart,pandocHTMLCommentEnd
 call s:WithConceal('html_c_s', 'syn match pandocHTMLCommentStart /<!--/ contained', 'conceal cchar='.s:cchars['html_c_s'])
 call s:WithConceal('html_c_e', 'syn match pandocHTMLCommentEnd /-->/ contained', 'conceal cchar='.s:cchars['html_c_e'])
-" }}}3
+" 
 
-" LaTeX: {{{3
+" LaTeX: 
 " Set embedded LaTex (pandoc extension) highlighting
 " Unset current_syntax so the 2nd include will work
 unlet b:current_syntax
@@ -252,49 +252,49 @@ if index(g:pandoc#syntax#conceal#blacklist, 'inlinemath') == -1
     " Can't use WithConceal here because it will mess up all other conceals
     " when dollar signs are used normally. It must be skipped entirely if
     " inlinemath is blacklisted
-    syn region pandocLaTeXInlineMath start=/\v\\@<!\$\S@=/ end=/\v\\@<!\$\d@!/ keepend contains=@LATEX
-    syn region pandocLaTeXInlineMath start=/\\\@<!\\(/ end=/\\\@<!\\)/ keepend contains=@LATEX
+"    syn region pandocLaTeXInlineMath start=/\v\\@<!\$\S@=/ end=/\v\\@<!\$\d@!/ keepend contains=@LATEX
+"    syn region pandocLaTeXInlineMath start=/\\\@<!\\(/ end=/\\\@<!\\)/ keepend contains=@LATEX
 endif
 syn match pandocEscapedDollar /\\\$/ conceal cchar=$
 syn match pandocProtectedFromInlineLaTeX /\\\@<!\${.*}\(\(\s\|[[:punct:]]\)\([^$]*\|.*\(\\\$.*\)\{2}\)\n\n\|$\)\@=/ display
 " contains=@LATEX
-syn region pandocLaTeXMathBlock start=/\$\$/ end=/\$\$/ keepend contains=@LATEX
-syn region pandocLaTeXMathBlock start=/\\\@<!\\\[/ end=/\\\@<!\\\]/ keepend contains=@LATEX
+"syn region pandocLaTeXMathBlock start=/\$\$/ end=/\$\$/ keepend contains=@LATEX
+"syn region pandocLaTeXMathBlock start=/\\\@<!\\\[/ end=/\\\@<!\\\]/ keepend contains=@LATEX
 syn match pandocLaTeXCommand /\\[[:alpha:]]\+\(\({.\{-}}\)\=\(\[.\{-}\]\)\=\)*/ contains=@LATEX
 syn region pandocLaTeXRegion start=/\\begin{\z(.\{-}\)}/ end=/\\end{\z1}/ keepend contains=@LATEX
 " we rehighlight sectioning commands, because otherwise tex.vim captures all text until EOF or a new sectioning command
 syn region pandocLaTexSection start=/\\\(part\|chapter\|\(sub\)\{,2}section\|\(sub\)\=paragraph\)\*\=\(\[.*\]\)\={/ end=/\}/ keepend
 syn match pandocLaTexSectionCmd /\\\(part\|chapter\|\(sub\)\{,2}section\|\(sub\)\=paragraph\)/ contained containedin=pandocLaTexSection
 syn match pandocLaTeXDelimiter /[[\]{}]/ contained containedin=pandocLaTexSection
-" }}}3
+" 
 
 if exists('s:foldmethod') && s:foldmethod !=# &l:foldmethod
     let &l:foldmethod = s:foldmethod
 endif
 
-" }}}2
+" 
 
-" Titleblock: {{{2
+" Titleblock: 
 syn region pandocTitleBlock start=/\%^%/ end=/\n\n/ contains=pandocReferenceLabel,pandocReferenceURL,pandocNewLine
 call s:WithConceal('titleblock', 'syn match pandocTitleBlockMark /%\ / contained containedin=pandocTitleBlock,pandocTitleBlockTitle', 'conceal')
 syn match pandocTitleBlockTitle /\%^%.*\n/ contained containedin=pandocTitleBlock
-" }}}2
+" 
 
-" Blockquotes: {{{2
+" Blockquotes: 
 syn match pandocBlockQuote /^\s\{,3}>.*\n\(.*\n\@1<!\n\)*/ contains=@Spell,pandocEmphasis,pandocStrong,pandocPCite,pandocSuperscript,pandocSubscript,pandocStrikeout,pandocUListItem,pandocNoFormatted,pandocAmpersandEscape,pandocLaTeXInlineMath,pandocEscapedDollar,pandocLaTeXCommand,pandocLaTeXMathBlock,pandocLaTeXRegion skipnl
 syn match pandocBlockQuoteMark /\_^\s\{,3}>/ contained containedin=pandocEmphasis,pandocStrong,pandocPCite,pandocSuperscript,pandocSubscript,pandocStrikeout,pandocUListItem,pandocNoFormatted
-" }}}2
+" 
 
-" Code Blocks: {{{2
+" Code Blocks: 
 if g:pandoc#syntax#protect#codeblocks == 1
     syn match pandocCodeblock /\([ ]\{4}\|\t\).*$/
 endif
 syn region pandocCodeBlockInsideIndent   start=/\(\(\d\|\a\|*\).*\n\)\@<!\(^\(\s\{8,}\|\t\+\)\).*\n/ end=/.\(\n^\s*\n\)\@=/ contained
-" }}}2
+" 
 
-" Links: {{{2
+" Links: 
 
-" Base: {{{3
+" Base: 
 syn region pandocReferenceLabel matchgroup=pandocOperator start=/!\{,1}\\\@<!\^\@<!\[/ skip=/\(\\\@<!\]\]\@=\|`.*\\\@<!].*`\)/ end=/\\\@<!\]/ keepend display
 if g:pandoc#syntax#conceal#urls == 1
     syn region pandocReferenceURL matchgroup=pandocOperator start=/\]\@1<=(/ end=/)/ keepend conceal
@@ -305,22 +305,22 @@ endif
 syn match pandocNoLabel /\]\@1<!\(\s\{,3}\|^\)\[[^\[\]]\{-}\]\(\s\+\|$\)[\[(]\@!/ contains=pandocPCite
 syn match pandocLinkTip /\s*".\{-}"/ contained containedin=pandocReferenceURL contains=@Spell,pandocAmpersandEscape display
 call s:WithConceal('image', 'syn match pandocImageIcon /!\[\@=/ display', 'conceal cchar='. s:cchars['image'])
-" }}}3
+" 
 
-" Definitions: {{{3
+" Definitions: 
 syn region pandocReferenceDefinition start=/\[.\{-}\]:/ end=/\(\n\s*".*"$\|$\)/ keepend
 syn match pandocReferenceDefinitionLabel /\[\zs.\{-}\ze\]:/ contained containedin=pandocReferenceDefinition display
 syn match pandocReferenceDefinitionAddress /:\s*\zs.*/ contained containedin=pandocReferenceDefinition
 syn match pandocReferenceDefinitionTip /\s*".\{-}"/ contained containedin=pandocReferenceDefinition,pandocReferenceDefinitionAddress contains=@Spell,pandocAmpersandEscape
-" }}}3
+" 
 
-" Automatic_links: {{{3
+" Automatic_links: 
 syn match pandocAutomaticLink /<\(https\{0,1}.\{-}\|[A-Za-z0-9!#$%&'*+\-/=?^_`{|}~.]\{-}@[A-Za-z0-9\-]\{-}\.\w\{-}\)>/ contains=NONE
-" }}}3
+" 
 
-" }}}2
+" 
 
-" Citations: {{{2
+" Citations: 
 " parenthetical citations
 syn match pandocPCite "\^\@<!\[[^\[\]]\{-}-\{0,1}@[[:alnum:]_][[:digit:][:lower:][:upper:]_:.#$%&\-+?<>~/]*.\{-}\]" contains=pandocEmphasis,pandocStrong,pandocLatex,pandocCiteKey,@Spell,pandocAmpersandEscape display
 " in-text citations with location
@@ -329,33 +329,33 @@ syn match pandocICite "@[[:alnum:]_][[:digit:][:lower:][:upper:]_:.#$%&\-+?<>~/]
 syn match pandocCiteKey /\(-\=@[[:alnum:]_][[:digit:][:lower:][:upper:]_:.#$%&\-+?<>~/]*\)/ containedin=pandocPCite,pandocICite contains=@NoSpell display
 syn match pandocCiteAnchor /[-@]/ contained containedin=pandocCiteKey display
 syn match pandocCiteLocator /[\[\]]/ contained containedin=pandocPCite,pandocICite
-" }}}2
+" 
 
-" Text Styles: {{{2
+" Text Styles: 
 
-" Emphasis: {{{3
+" Emphasis: 
 call s:WithConceal('block', 'syn region pandocEmphasis matchgroup=pandocOperator start=/\\\@1<!\(\_^\|\s\|[[:punct:]]\)\@<=\*\S\@=/ skip=/\(\*\*\|__\)/ end=/\*\([[:punct:]]\|\s\|\_$\)\@=/ contains=@Spell,pandocNoFormattedInEmphasis,pandocLatexInlineMath,pandocAmpersandEscape', 'concealends')
 call s:WithConceal('block', 'syn region pandocEmphasis matchgroup=pandocOperator start=/\\\@1<!\(\_^\|\s\|[[:punct:]]\)\@<=_\S\@=/ skip=/\(\*\*\|__\)/ end=/\S\@1<=_\([[:punct:]]\|\s\|\_$\)\@=/ contains=@Spell,pandocNoFormattedInEmphasis,pandocLatexInlineMath,pandocAmpersandEscape', 'concealends')
-" }}}3
+" 
 
-" Strong: {{{3
+" Strong: 
 call s:WithConceal('block', 'syn region pandocStrong matchgroup=pandocOperator start=/\(\\\@<!\*\)\{2}/ end=/\(\\\@<!\*\)\{2}/ contains=@Spell,pandocNoFormattedInStrong,pandocLatexInlineMath,pandocAmpersandEscape', 'concealends')
 call s:WithConceal('block', 'syn region pandocStrong matchgroup=pandocOperator start=/__/ end=/__/ contains=@Spell,pandocNoFormattedInStrong,pandocLatexInlineMath,pandocAmpersandEscape', 'concealends')
-" }}}3
+" 
 
-" Strong Emphasis: {{{3
+" Strong Emphasis: 
 call s:WithConceal('block', 'syn region pandocStrongEmphasis matchgroup=pandocOperator start=/\*\{3}\(\S[^*]*\(\*\S\|\n[^*]*\*\S\)\)\@=/ end=/\S\@<=\*\{3}/ contains=@Spell,pandocAmpersandEscape', 'concealends')
 call s:WithConceal('block', 'syn region pandocStrongEmphasis matchgroup=pandocOperator start=/\(___\)\S\@=/ end=/\S\@<=___/ contains=@Spell,pandocAmpersandEscape', 'concealends')
-" }}}3
+" 
 
-" Mixed: {{{3
+" Mixed: 
 call s:WithConceal('block', 'syn region pandocStrongInEmphasis matchgroup=pandocOperator start=/\*\*/ end=/\*\*/ contained containedin=pandocEmphasis contains=@Spell,pandocAmpersandEscape', 'concealends')
 call s:WithConceal('block', 'syn region pandocStrongInEmphasis matchgroup=pandocOperator start=/__/ end=/__/ contained containedin=pandocEmphasis contains=@Spell,pandocAmpersandEscape', 'concealends')
 call s:WithConceal('block', 'syn region pandocEmphasisInStrong matchgroup=pandocOperator start=/\\\@1<!\(\_^\|\s\|[[:punct:]]\)\@<=\*\S\@=/ skip=/\(\*\*\|__\)/ end=/\S\@<=\*\([[:punct:]]\|\s\|\_$\)\@=/ contained containedin=pandocStrong contains=@Spell,pandocAmpersandEscape', 'concealends')
 call s:WithConceal('block', 'syn region pandocEmphasisInStrong matchgroup=pandocOperator start=/\\\@<!\(\_^\|\s\|[[:punct:]]\)\@<=_\S\@=/ skip=/\(\*\*\|__\)/ end=/\S\@<=_\([[:punct:]]\|\s\|\_$\)\@=/ contained containedin=pandocStrong contains=@Spell,pandocAmpersandEscape', 'concealends')
-" }}}3
+" 
 
-" Inline Code: {{{3
+" Inline Code: 
 " Using single back ticks
 call s:WithConceal('inlinecode', 'syn region pandocNoFormatted matchgroup=pandocOperator start=/\\\@<!`/ end=/\\\@<!`/ nextgroup=pandocNoFormattedAttrs', 'concealends')
 call s:WithConceal('inlinecode', 'syn region pandocNoFormattedInEmphasis matchgroup=pandocOperator start=/\\\@<!`/ end=/\\\@<!`/ nextgroup=pandocNoFormattedAttrs contained', 'concealends')
@@ -365,26 +365,26 @@ call s:WithConceal('inlinecode', 'syn region pandocNoFormatted matchgroup=pandoc
 call s:WithConceal('inlinecode', 'syn region pandocNoFormattedInEmphasis matchgroup=pandocOperator start=/\\\@<!``/ end=/\\\@<!``/ nextgroup=pandocNoFormattedAttrs contained', 'concealends')
 call s:WithConceal('inlinecode', 'syn region pandocNoFormattedInStrong matchgroup=pandocOperator start=/\\\@<!``/ end=/\\\@<!``/ nextgroup=pandocNoFormattedAttrs contained', 'concealends')
 syn match pandocNoFormattedAttrs /{.\{-}}/ contained
-" }}}3
+" 
 
-" Subscripts: {{{3
+" Subscripts: 
 syn region pandocSubscript start=/\~\(\([[:graph:]]\(\\ \)\=\)\{-}\~\)\@=/ end=/\~/ keepend
 call s:WithConceal('subscript', 'syn match pandocSubscriptMark /\~/ contained containedin=pandocSubscript', 'conceal cchar='.s:cchars['sub'])
-" }}}3
+" 
 
-" Superscript: {{{3
+" Superscript: 
 syn region pandocSuperscript start=/\^\(\([[:graph:]]\(\\ \)\=\)\{-}\^\)\@=/ skip=/\\ / end=/\^/ keepend
 call s:WithConceal('superscript', 'syn match pandocSuperscriptMark /\^/ contained containedin=pandocSuperscript', 'conceal cchar='.s:cchars['super'])
-" }}}3
+" 
 
-" Strikeout: {{{3
+" Strikeout: 
 syn region pandocStrikeout start=/\~\~/ end=/\~\~/ contains=@Spell,pandocAmpersandEscape keepend
 call s:WithConceal('strikeout', 'syn match pandocStrikeoutMark /\~\~/ contained containedin=pandocStrikeout', 'conceal cchar='.s:cchars['strike'])
-" }}}3
+" 
 
-" }}}2
+" 
 
-" Headers: {{{2
+" Headers: 
 syn match pandocAtxHeader /\(\%^\|<.\+>.*\n\|^\s*\n\)\@<=#\{1,6}.*\n/ contains=pandocEmphasis,pandocStrong,pandocNoFormatted,pandocLaTeXInlineMath,pandocEscapedDollar,@Spell,pandocAmpersandEscape,pandocReferenceLabel,pandocReferenceURL display
 syn match pandocAtxHeaderMark /\(^#\{1,6}\|\\\@<!#\+\(\s*.*$\)\@=\)/ contained containedin=pandocAtxHeader
 call s:WithConceal('atx', 'syn match pandocAtxStart /#/ contained containedin=pandocAtxHeaderMark', 'conceal cchar='.s:cchars['atx'])
@@ -392,16 +392,16 @@ syn match pandocSetexHeader /^.\+\n[=]\+$/ contains=pandocEmphasis,pandocStrong,
 syn match pandocSetexHeader /^.\+\n[-]\+$/ contains=pandocEmphasis,pandocStrong,pandocNoFormatted,pandocLaTeXInlineMath,pandocEscapedDollar,@Spell,pandocAmpersandEscape
 syn match pandocHeaderAttr /{.*}/ contained containedin=pandocAtxHeader,pandocSetexHeader
 syn match pandocHeaderID /#[-_:.[:lower:][:upper:]]*/ contained containedin=pandocHeaderAttr
-" }}}2
+" 
 
-" Line Blocks: {{{2
+" Line Blocks: 
 syn region pandocLineBlock start=/^|/ end=/\(^|\(.*\n|\@!\)\@=.*\)\@<=\n/ transparent
 syn match pandocLineBlockDelimiter /^|/ contained containedin=pandocLineBlock
-" }}}2
+" 
 
-" Tables: {{{2
+" Tables: 
 
-" Simple: {{{3
+" Simple: 
 syn region pandocSimpleTable start=/\%#=2\(^.*[[:graph:]].*\n\)\@<!\(^.*[[:graph:]].*\n\)\(-\{2,}\s*\)\+\n\n\@!/ end=/\n\n/ containedin=ALLBUT,pandocDelimitedCodeBlock,pandocDelimitedCodeBlockStart,pandocYAMLHeader keepend
 syn match pandocSimpleTableDelims /\-/ contained containedin=pandocSimpleTable
 syn match pandocSimpleTableHeader /\%#=2\(^.*[[:graph:]].*\n\)\@<!\(^.*[[:graph:]].*\n\)/ contained containedin=pandocSimpleTable
@@ -409,16 +409,16 @@ syn match pandocSimpleTableHeader /\%#=2\(^.*[[:graph:]].*\n\)\@<!\(^.*[[:graph:
 syn region pandocTable start=/\%#=2^\(-\{2,}\s*\)\+\n\n\@!/ end=/\%#=2^\(-\{2,}\s*\)\+\n\n/ containedin=ALLBUT,pandocDelimitedCodeBlock,pandocYAMLHeader keepend
 syn match pandocTableDelims /\-/ contained containedin=pandocTable
 syn region pandocTableMultilineHeader start=/\%#=2\(^-\{2,}\n\)\@<=./ end=/\%#=2\n-\@=/ contained containedin=pandocTable
-" }}}3
+" 
 
-" Grid: {{{3
+" Grid: 
 syn region pandocGridTable start=/\%#=2\n\@1<=+-/ end=/+\n\n/ containedin=ALLBUT,pandocDelimitedCodeBlock,pandocYAMLHeader keepend
 syn match pandocGridTableDelims /[\|=]/ contained containedin=pandocGridTable
 syn match pandocGridTableDelims /\%#=2\([\-+][\-+=]\@=\|[\-+=]\@1<=[\-+]\)/ contained containedin=pandocGridTable
 syn match pandocGridTableHeader /\%#=2\(^.*\n\)\(+=.*\)\@=/ contained containedin=pandocGridTable
-" }}}3
+" 
 
-" Pipe: {{{3
+" Pipe: 
 " with beginning and end pipes
 syn region pandocPipeTable start=/\%#=2\([+|]\n\)\@<!\n\@1<=|\(.*|\)\@=/ end=/|.*\n\(\n\|{\)/ containedin=ALLBUT,pandocDelimitedCodeBlock,pandocYAMLHeader keepend
 " without beginning and end pipes
@@ -426,12 +426,12 @@ syn region pandocPipeTable start=/\%#=2^.*\n-.\{-}|/ end=/|.*\n\n/ keepend
 syn match pandocPipeTableDelims /[\|\-:+]/ contained containedin=pandocPipeTable
 syn match pandocPipeTableHeader /\(^.*\n\)\(|-\)\@=/ contained containedin=pandocPipeTable
 syn match pandocPipeTableHeader /\(^.*\n\)\(-\)\@=/ contained containedin=pandocPipeTable
-" }}}3
+" 
 
 syn match pandocTableHeaderWord /\<.\{-}\>/ contained containedin=pandocGridTableHeader,pandocPipeTableHeader contains=@Spell
-" }}}2
+" 
 
-" Delimited Code Blocks: {{{2
+" Delimited Code Blocks: 
 " this is here because we can override strikeouts and subscripts
 syn region pandocDelimitedCodeBlock start=/^\(>\s\)\?\z(\([ ]\+\|\t\)\=\~\{3,}\~*\)/ end=/^\z1\~*/ skipnl contains=pandocDelimitedCodeBlockStart,pandocDelimitedCodeBlockEnd keepend
 syn region pandocDelimitedCodeBlock start=/^\(>\s\)\?\z(\([ ]\+\|\t\)\=`\{3,}`*\)/ end=/^\z1`*/ skipnl contains=pandocDelimitedCodeBlockStart,pandocDelimitedCodeBlockEnd keepend
@@ -454,17 +454,17 @@ if g:pandoc#syntax#codeblocks#embeds#use != 0
       call EnableEmbedsforCodeblocksWithLang(l)
     endfor
 endif
-" }}}2
+" 
 
-" Abbreviations: {{{2
+" Abbreviations: 
 syn region pandocAbbreviationDefinition start=/^\*\[.\{-}\]:\s*/ end='$' contains=pandocNoFormatted,@Spell,pandocAmpersandEscape
 call s:WithConceal('abbrev', 'syn match pandocAbbreviationSeparator /:/ contained containedin=pandocAbbreviationDefinition', 'conceal cchar='.s:cchars['abbrev'])
 syn match pandocAbbreviation /\*\[.\{-}\]/ contained containedin=pandocAbbreviationDefinition
 call s:WithConceal('abbrev', 'syn match pandocAbbreviationHead /\*\[/ contained containedin=pandocAbbreviation', 'conceal')
 call s:WithConceal('abbrev', 'syn match pandocAbbreviationTail /\]/ contained containedin=pandocAbbreviation', 'conceal')
-" }}}2
+" 
 
-" Footnotes: {{{2
+" Footnotes: 
 " we put these here not to interfere with superscripts.
 syn match pandocFootnoteID /\[\^[^\]]\+\]/ nextgroup=pandocFootnoteDef
 
@@ -479,9 +479,9 @@ syn match pandocFootnoteBlockSeparator /:/ contained containedin=pandocFootnoteB
 syn match pandocFootnoteID /\[\^.\{-}\]/ contained containedin=pandocFootnoteBlock
 call s:WithConceal('footnote', 'syn match pandocFootnoteIDHead /\[\^/ contained containedin=pandocFootnoteID', 'conceal cchar='.s:cchars['footnote'])
 call s:WithConceal('footnote', 'syn match pandocFootnoteIDTail /\]/ contained containedin=pandocFootnoteID', 'conceal')
-" }}}2
+" 
 
-" List Items: {{{2
+" List Items: 
 " Unordered lists
 syn match pandocUListItem /^>\=\s*[*+-]\s\+-\@!.*$/ nextgroup=pandocUListItem,pandocLaTeXMathBlock,pandocLaTeXInlineMath,pandocEscapedDollar,pandocDelimitedCodeBlock,pandocListItemContinuation contains=@Spell,pandocEmphasis,pandocStrong,pandocNoFormatted,pandocStrikeout,pandocSubscript,pandocSuperscript,pandocStrongEmphasis,pandocStrongEmphasis,pandocPCite,pandocICite,pandocCiteKey,pandocReferenceLabel,pandocLaTeXCommand,pandocLaTeXMathBlock,pandocLaTeXInlineMath,pandocEscapedDollar,pandocReferenceURL,pandocAutomaticLink,pandocFootnoteDef,pandocFootnoteBlock,pandocFootnoteID,pandocAmpersandEscape skipempty display
 call s:WithConceal('list', 'syn match pandocUListItemBullet /^>\=\s*\zs[*+-]/ contained containedin=pandocUListItem', 'conceal cchar='.s:cchars['li'])
@@ -497,75 +497,75 @@ syn match pandocListItemBullet /^(\?.\{-}[.)]/ contained containedin=pandocListI
 syn match pandocListItemBulletId /\(\d\+\|\l\|\#\|@.\{-}\|x\=l\=\(i\{,3}[vx]\=\)\{,3}c\{,3}\)/ contained containedin=pandocListItemBullet
 
 syn match pandocListItemContinuation /^\s\+\([-+*]\s\+\|(\?.\+[).]\)\@<!\([[:upper:][:lower:]_"[]\|\*\S\)\@=.*$/ nextgroup=pandocLaTeXMathBlock,pandocLaTeXInlineMath,pandocEscapedDollar,pandocDelimitedCodeBlock,pandocListItemContinuation,pandocListItem contains=@Spell,pandocEmphasis,pandocStrong,pandocNoFormatted,pandocStrikeout,pandocSubscript,pandocSuperscript,pandocStrongEmphasis,pandocStrongEmphasis,pandocPCite,pandocICite,pandocCiteKey,pandocReferenceLabel,pandocReferenceURL,pandocLaTeXCommand,pandocLaTeXMathBlock,pandocLaTeXInlineMath,pandocEscapedDollar,pandocAutomaticLink,pandocFootnoteDef,pandocFootnoteBlock,pandocFootnoteID,pandocAmpersandEscape contained skipempty display
-" }}}2
+" 
 
-" Definitions: {{{2
+" Definitions: 
 if g:pandoc#syntax#use_definition_lists == 1
     syn region pandocDefinitionBlock start=/^\%(\_^\s*\([`~]\)\1\{2,}\)\@!.*\n\(^\s*\n\)\=\s\{0,2}\([:~]\)\(\3\{2,}\3*\)\@!/ skip=/\n\n\zs\s/ end=/\n\n/ contains=pandocDefinitionBlockMark,pandocDefinitionBlockTerm,pandocCodeBlockInsideIndent,pandocEmphasis,pandocStrong,pandocStrongEmphasis,pandocNoFormatted,pandocStrikeout,pandocSubscript,pandocSuperscript,pandocFootnoteID,pandocReferenceURL,pandocReferenceLabel,pandocLaTeXMathBlock,pandocLaTeXInlineMath,pandocEscapedDollar,pandocAutomaticLink,pandocEmDash,pandocEnDash,pandocFootnoteDef,pandocFootnoteBlock,pandocFootnoteID
     syn match pandocDefinitionBlockTerm /^.*\n\(^\s*\n\)\=\(\s*[:~]\)\@=/ contained contains=pandocNoFormatted,pandocEmphasis,pandocStrong,pandocLaTeXInlineMath,pandocEscapedDollar,pandocFootnoteDef,pandocFootnoteBlock,pandocFootnoteID nextgroup=pandocDefinitionBlockMark
     call s:WithConceal('definition', 'syn match pandocDefinitionBlockMark /^\s*[:~]/ contained', 'conceal cchar='.s:cchars['definition'])
 endif
-" }}}2
+" 
 
-" Special: {{{2
+" Special: 
 
-" New_lines: {{{3
+" New_lines: 
 if g:pandoc#syntax#newlines == 1
   call s:WithConceal('newline', 'syn match pandocNewLine /\%(\%(\S\)\@<= \{2,}\|\\\)$/ display containedin=pandocEmphasis,pandocStrong,pandocStrongEmphasis,pandocStrongInEmphasis,pandocEmphasisInStrong', 'conceal cchar='.s:cchars['newline'])
 endif
-" }}}3
+" 
 
-" Emdashes: {{{3
+" Emdashes: 
 if &encoding ==# 'utf-8'
   call s:WithConceal('emdashes', 'syn match pandocEllipses /\([^-]\)\@<=---\([^-]\)\@=/ display', 'conceal cchar=—')
 endif
-" }}}3
+" 
 
-" Endashes: {{{3
+" Endashes: 
 if &encoding ==# 'utf-8'
   call s:WithConceal('endashes', 'syn match pandocEllipses /\([^-]\)\@<=--\([^-]\)\@=/ display', 'conceal cchar=–')
 endif
-" }}}3
+" 
 
-" Ellipses: {{{3
+" Ellipses: 
 if &encoding ==# 'utf-8'
     call s:WithConceal('ellipses', 'syn match pandocEllipses /\.\.\./ display', 'conceal cchar=…')
 endif
-" }}}3
+" 
 
-" Quotes: {{{3
+" Quotes: 
 if &encoding ==# 'utf-8'
     call s:WithConceal('quotes', 'syn match pandocBeginQuote /"\</  containedin=pandocEmphasis,pandocStrong,pandocListItem,pandocListItemContinuation,pandocUListItem display', 'conceal cchar='.s:cchars['quote_s'])
     call s:WithConceal('quotes', 'syn match pandocEndQuote /\(\>[[:punct:]]*\)\@<="[[:blank:][:punct:]\n]\@=/  containedin=pandocEmphasis,pandocStrong,pandocUListItem,pandocListItem,pandocListItemContinuation display', 'conceal cchar='.s:cchars['quote_e'])
 endif
-" }}}3
+" 
 
-" Hrule: {{{3
+" Hrule: 
 syn match pandocHRule /^\s*\([*\-_]\)\s*\%(\1\s*\)\{2,}$/ display
-" }}}3
+" 
 
-" Backslashes: {{{3
+" Backslashes: 
 if g:pandoc#syntax#conceal#backslash == 1
     syn match pandocBackslash /\v\\@<!\\((re)?newcommand)@!/ containedin=ALLBUT,pandocCodeblock,pandocCodeBlockInsideIndent,pandocNoFormatted,pandocNoFormattedInEmphasis,pandocNoFormattedInStrong,pandocDelimitedCodeBlock,pandocLineBlock,pandocYAMLHeader conceal
 endif
-" }}}3
+" 
 
-" &-escaped Special Characters: {{{3
+" &-escaped Special Characters: 
 syn match pandocAmpersandEscape /\v\&(#\d+|#x\x+|[[:alnum:]]+)\;/ contains=NoSpell
-" }}}3
+" 
 
-" YAML: {{{2
+" YAML: 
 try
     unlet! b:current_syntax
     syn include @YAML syntax/yaml.vim
 catch /E484/
 endtry
 syn region pandocYAMLHeader start=/\%(\%^\|\_^\s*\n\)\@<=\_^-\{3}\ze\n.\+/ end=/^\([-.]\)\1\{2}$/ keepend contains=@YAML containedin=TOP
-" }}}2
+" 
 
-" }}}1
+" 
 
-" Styling: {{{1
+" Styling: 
 function! s:SetupPandocHighlights()
 
   hi def link pandocOperator Operator
@@ -696,7 +696,7 @@ endfunction
 
 call s:SetupPandocHighlights()
 
-" }}}1
+" 
 
 let b:current_syntax = 'pandoc'
 
