@@ -1569,7 +1569,7 @@ describe('API/extmarks', function()
       sign_text = '>>',
       spell = true,
       virt_lines = {
-        { { 'lines', 'Macro' }, { '???' } },
+        { { 'lines', 'Macro' }, { '???' }, { ';;;', '' } },
         { { 'stack', { 'Type', 'Search' } }, { '!!!' } },
       },
       virt_lines_above = true,
@@ -1604,7 +1604,7 @@ describe('API/extmarks', function()
         sign_text = '>>',
         spell = true,
         virt_lines = {
-          { { 'lines', 'Macro' }, { '???' } },
+          { { 'lines', 'Macro' }, { '???' }, { ';;;', '' } },
           { { 'stack', { 'Type', 'Search' } }, { '!!!' } },
         },
         virt_lines_above = true,
@@ -1743,7 +1743,7 @@ describe('API/extmarks', function()
     command('silent undo')
     screen:expect([[
       S1{7:  }^aaa bbb ccc                         |
-      S1S2aaa bbb ccc                         |
+      S2S1aaa bbb ccc                         |
       S2{7:  }aaa bbb ccc                         |
       {7:    }aaa bbb ccc                         |*2
                                               |
@@ -1891,6 +1891,24 @@ describe('Extmarks buffer api with many marks', function()
     api.nvim_buf_clear_namespace(0, ns1, 10, 20)
     for id, mark in pairs(ns_marks[ns1]) do
       if 10 <= mark[1] and mark[1] < 20 then
+        ns_marks[ns1][id] = nil
+      end
+    end
+    eq(ns_marks[ns1], get_marks(ns1))
+    eq(ns_marks[ns2], get_marks(ns2))
+
+    api.nvim_buf_clear_namespace(0, ns1, 0, 10)
+    for id, mark in pairs(ns_marks[ns1]) do
+      if mark[1] < 10 then
+        ns_marks[ns1][id] = nil
+      end
+    end
+    eq(ns_marks[ns1], get_marks(ns1))
+    eq(ns_marks[ns2], get_marks(ns2))
+
+    api.nvim_buf_clear_namespace(0, ns1, 20, -1)
+    for id, mark in pairs(ns_marks[ns1]) do
+      if mark[1] >= 20 then
         ns_marks[ns1][id] = nil
       end
     end

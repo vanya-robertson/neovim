@@ -140,7 +140,7 @@ local client_errors = {
   SERVER_RESULT_CALLBACK_ERROR = 7,
 }
 
---- @type table<string|integer, string|integer>
+--- @type table<string,integer> | table<integer,string>
 --- @nodoc
 M.client_errors = vim.deepcopy(client_errors)
 for k, v in pairs(client_errors) do
@@ -407,7 +407,9 @@ function Client:handle_body(body)
   end
   log.debug('rpc.receive', decoded)
 
-  if type(decoded.method) == 'string' and decoded.id then
+  if type(decoded) ~= 'table' then
+    self:on_error(M.client_errors.INVALID_SERVER_MESSAGE, decoded)
+  elseif type(decoded.method) == 'string' and decoded.id then
     local err --- @type lsp.ResponseError|nil
     -- Schedule here so that the users functions don't trigger an error and
     -- we can still use the result.
@@ -502,7 +504,7 @@ function Client:handle_body(body)
       if decoded.error then
         decoded.error = setmetatable(decoded.error, {
           __tostring = M.format_rpc_error,
-        }) --- @type table
+        })
       end
       self:try_call(
         M.client_errors.SERVER_RESULT_CALLBACK_ERROR,
@@ -645,9 +647,23 @@ function M.connect(host_or_path, port)
       or assert(uv.new_tcp(), 'Could not create new TCP socket')
     )
     local closing = false
+    -- Connect returns a PublicClient synchronously so the caller
+    -- can immediately send messages before the connection is established
+    -- -> Need to buffer them until that happens
+    local connected = false
+    -- size should be enough because the client can't really do anything until initialization is done
+    -- which required a response from the server - implying the connection got established
+    local msgbuf = vim.ringbuf(10)
     local transport = {
       write = function(msg)
-        handle:write(msg)
+        if connected then
+          local _, err = handle:write(msg)
+          if err and not closing then
+            log.error('Error on handle:write: %q', err)
+          end
+        else
+          msgbuf:push(msg)
+        end
       end,
       is_closing = function()
         return closing
@@ -679,6 +695,10 @@ function M.connect(host_or_path, port)
       handle:read_start(M.create_read_loop(handle_body, transport.terminate, function(read_err)
         client:on_error(M.client_errors.READ_ERROR, read_err)
       end))
+      connected = true
+      for msg in msgbuf do
+        handle:write(msg)
+      end
     end
     if port == nil then
       handle:connect(host_or_path, on_connect)
@@ -704,7 +724,7 @@ end
 --- @param cmd string[] Command to start the LSP server.
 --- @param dispatchers? vim.lsp.rpc.Dispatchers
 --- @param extra_spawn_params? vim.lsp.rpc.ExtraSpawnParams
---- @return vim.lsp.rpc.PublicClient? : Client RPC object, with these methods:
+--- @return vim.lsp.rpc.PublicClient : Client RPC object, with these methods:
 ---   - `notify()` |vim.lsp.rpc.notify()|
 ---   - `request()` |vim.lsp.rpc.request()|
 ---   - `is_closing()` returns a boolean indicating if the RPC is closing.
@@ -779,8 +799,7 @@ function M.start(cmd, dispatchers, extra_spawn_params)
     end
     local msg =
       string.format('Spawning language server with cmd: `%s` failed%s', vim.inspect(cmd), sfx)
-    vim.notify(msg, vim.log.levels.WARN)
-    return nil
+    error(msg)
   end
 
   sysobj = sysobj_or_err --[[@as vim.SystemObj]]

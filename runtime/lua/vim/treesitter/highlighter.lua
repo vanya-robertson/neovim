@@ -47,7 +47,7 @@ function TSHighlighterQuery:get_hl_from_capture(capture)
   return self.hl_cache[capture]
 end
 
----@package
+---@nodoc
 function TSHighlighterQuery:query()
   return self._query
 end
@@ -75,7 +75,7 @@ local TSHighlighter = {
 
 TSHighlighter.__index = TSHighlighter
 
----@package
+---@nodoc
 ---
 --- Creates a highlighter for `tree`.
 ---
@@ -215,7 +215,7 @@ end
 ---@param start_row integer
 ---@param new_end integer
 function TSHighlighter:on_bytes(_, _, start_row, _, _, _, _, _, new_end)
-  api.nvim__buf_redraw_range(self.bufnr, start_row, start_row + new_end + 1)
+  api.nvim__redraw({ buf = self.bufnr, range = { start_row, start_row + new_end + 1 } })
 end
 
 ---@package
@@ -227,12 +227,12 @@ end
 ---@param changes Range6[]
 function TSHighlighter:on_changedtree(changes)
   for _, ch in ipairs(changes) do
-    api.nvim__buf_redraw_range(self.bufnr, ch[1], ch[4] + 1)
+    api.nvim__redraw({ buf = self.bufnr, range = { ch[1], ch[4] + 1 } })
   end
 end
 
 --- Gets the query used for @param lang
----@package
+---@nodoc
 ---@param lang string Language used by the highlighter.
 ---@return vim.treesitter.highlighter.Query
 function TSHighlighter:get_query(lang)
@@ -377,11 +377,15 @@ function TSHighlighter._on_spell_nav(_, _, buf, srow, _, erow, _)
     return
   end
 
+  -- Do not affect potentially populated highlight state. Here we just want a temporary
+  -- empty state so the C code can detect whether the region should be spell checked.
+  local highlight_states = self._highlight_states
   self:prepare_highlight_states(srow, erow)
 
   for row = srow, erow do
     on_line_impl(self, buf, row, true)
   end
+  self._highlight_states = highlight_states
 end
 
 ---@private

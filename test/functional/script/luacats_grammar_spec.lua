@@ -152,4 +152,18 @@ describe('luacats grammar', function()
     name = '[1]',
     type = 'integer',
   })
+
+  test('@param type `T` this is a generic type', {
+    desc = 'this is a generic type',
+    kind = 'param',
+    name = 'type',
+    type = '`T`',
+  })
+
+  test('@param type [number,string,"good"|"bad"] this is a tuple type', {
+    desc = 'this is a tuple type',
+    kind = 'param',
+    name = 'type',
+    type = '[number,string,"good"|"bad"]',
+  })
 end)

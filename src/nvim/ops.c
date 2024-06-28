@@ -24,6 +24,7 @@
 #include "nvim/cursor.h"
 #include "nvim/drawscreen.h"
 #include "nvim/edit.h"
+#include "nvim/errors.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/ex_cmds2.h"
@@ -281,8 +282,10 @@ void op_shift(oparg_T *oap, bool curs_top, int amount)
 /// @param call_changed_bytes  call changed_bytes()
 void shift_line(bool left, bool round, int amount, int call_changed_bytes)
 {
-  const int sw_val = get_sw_value_indent(curbuf);
-
+  int sw_val = get_sw_value_indent(curbuf, left);
+  if (sw_val == 0) {
+    sw_val = 1;              // shouldn't happen, just in case
+  }
   int count = get_indent();  // get current indent
 
   if (round) {  // round off indent
@@ -327,7 +330,7 @@ static void shift_block(oparg_T *oap, int amount)
   const int oldstate = State;
   char *newp;
   const int oldcol = curwin->w_cursor.col;
-  const int sw_val = get_sw_value_indent(curbuf);
+  const int sw_val = get_sw_value_indent(curbuf, left);
   const int ts_val = (int)curbuf->b_p_ts;
   struct block_def bd;
   int incr;
@@ -348,6 +351,7 @@ static void shift_block(oparg_T *oap, int amount)
   }
 
   char *const oldp = get_cursor_line_ptr();
+  const int old_line_len = get_cursor_line_len();
 
   int startcol, oldlen, newlen;
 
@@ -397,18 +401,17 @@ static void shift_block(oparg_T *oap, int amount)
     const int col_pre = bd.pre_whitesp_c - (bd.startspaces != 0);
     bd.textcol -= col_pre;
 
-    const size_t new_line_len  // the length of the line after the block shift
-      = (size_t)bd.textcol + (size_t)tabs + (size_t)spaces + strlen(bd.textstart);
-    newp = xmalloc(new_line_len + 1);
+    const int new_line_len  // the length of the line after the block shift
+      = bd.textcol + tabs + spaces + (old_line_len - (int)(bd.textstart - oldp));
+    newp = xmalloc((size_t)new_line_len + 1);
     memmove(newp, oldp, (size_t)bd.textcol);
     startcol = bd.textcol;
     oldlen = (int)(bd.textstart - old_textstart) + col_pre;
     newlen = tabs + spaces;
     memset(newp + bd.textcol, TAB, (size_t)tabs);
     memset(newp + bd.textcol + tabs, ' ', (size_t)spaces);
-    // Note that STRMOVE() copies the trailing NUL.
-    STRMOVE(newp + bd.textcol + tabs + spaces, bd.textstart);
-    assert(newlen - oldlen == (colnr_T)new_line_len - get_cursor_line_len());
+    STRCPY(newp + bd.textcol + tabs + spaces, bd.textstart);
+    assert(newlen - oldlen == new_line_len - old_line_len);
   } else {  // left
     char *verbatim_copy_end;      // end of the part of the line which is
                                   // copied verbatim
@@ -475,27 +478,27 @@ static void shift_block(oparg_T *oap, int amount)
     // part of the line that will be copied, it means we encountered a tab
     // character, which we will have to partly replace with spaces.
     assert(destination_col - verbatim_copy_width >= 0);
-    const size_t fill  // nr of spaces that replace a TAB
-      = (size_t)(destination_col - verbatim_copy_width);
+    const int fill  // nr of spaces that replace a TAB
+      = destination_col - verbatim_copy_width;
 
     assert(verbatim_copy_end - oldp >= 0);
-    const size_t verbatim_diff = (size_t)(verbatim_copy_end - oldp);
+    // length of string left of the shift position (ie the string not being shifted)
+    const int fixedlen = (int)(verbatim_copy_end - oldp);
     // The replacement line will consist of:
     // - the beginning of the original line up to "verbatim_copy_end",
     // - "fill" number of spaces,
     // - the rest of the line, pointed to by non_white.
-    const size_t new_line_len  // the length of the line after the block shift
-      = verbatim_diff + fill + strlen(non_white);
+    const int new_line_len  // the length of the line after the block shift
+      = fixedlen + fill + (old_line_len - (int)(non_white - oldp));
 
-    newp = xmalloc(new_line_len + 1);
-    startcol = (int)verbatim_diff;
-    oldlen = bd.textcol + (int)(non_white - bd.textstart) - (int)verbatim_diff;
-    newlen = (int)fill;
-    memmove(newp, oldp, verbatim_diff);
-    memset(newp + verbatim_diff, ' ', fill);
-    // Note that STRMOVE() copies the trailing NUL.
-    STRMOVE(newp + verbatim_diff + fill, non_white);
-    assert(newlen - oldlen == (colnr_T)new_line_len - get_cursor_line_len());
+    newp = xmalloc((size_t)new_line_len + 1);
+    startcol = fixedlen;
+    oldlen = bd.textcol + (int)(non_white - bd.textstart) - fixedlen;
+    newlen = fill;
+    memmove(newp, oldp, (size_t)fixedlen);
+    memset(newp + fixedlen, ' ', (size_t)fill);
+    STRCPY(newp + fixedlen + fill, non_white);
+    assert(newlen - oldlen == new_line_len - old_line_len);
   }
   // replace the line
   ml_replace(curwin->w_cursor.lnum, newp, false);
@@ -510,13 +513,13 @@ static void shift_block(oparg_T *oap, int amount)
 
 /// Insert string "s" (b_insert ? before : after) block :AKelly
 /// Caller must prepare for undo.
-static void block_insert(oparg_T *oap, char *s, bool b_insert, struct block_def *bdp)
+static void block_insert(oparg_T *oap, const char *s, size_t slen, bool b_insert,
+                         struct block_def *bdp)
 {
   int ts_val;
   int count = 0;                // extra spaces to replace a cut TAB
   int spaces = 0;               // non-zero if cutting a TAB
   colnr_T offset;               // pointer along new line
-  size_t s_len = strlen(s);
   char *newp, *oldp;            // new, old lines
   int oldstate = State;
   State = MODE_INSERT;          // don't want MODE_REPLACE for State
@@ -564,7 +567,7 @@ static void block_insert(oparg_T *oap, char *s, bool b_insert, struct block_def 
 
     assert(count >= 0);
     // Make sure the allocated size matches what is actually copied below.
-    newp = xmalloc((size_t)ml_get_len(lnum) + (size_t)spaces + s_len
+    newp = xmalloc((size_t)ml_get_len(lnum) + (size_t)spaces + slen
                    + (spaces > 0 && !bdp->is_short ? (size_t)(ts_val - spaces) : 0)
                    + (size_t)count + 1);
 
@@ -577,8 +580,8 @@ static void block_insert(oparg_T *oap, char *s, bool b_insert, struct block_def 
     memset(newp + offset, ' ', (size_t)spaces);
 
     // copy the new text
-    memmove(newp + offset + spaces, s, s_len);
-    offset += (int)s_len;
+    memmove(newp + offset + spaces, s, slen);
+    offset += (int)slen;
 
     int skipped = 0;
     if (spaces > 0 && !bdp->is_short) {
@@ -599,7 +602,7 @@ static void block_insert(oparg_T *oap, char *s, bool b_insert, struct block_def 
     if (spaces > 0) {
       offset += count;
     }
-    STRMOVE(newp + offset, oldp);
+    STRCPY(newp + offset, oldp);
 
     ml_replace(lnum, newp, false);
     extmark_splice_cols(curbuf, (int)lnum - 1, startcol,
@@ -1579,8 +1582,8 @@ int op_delete(oparg_T *oap)
       memset(newp + bd.textcol, ' ', (size_t)bd.startspaces +
              (size_t)bd.endspaces);
       // copy the part after the deleted part
-      oldp += bd.textcol + bd.textlen;
-      STRMOVE(newp + bd.textcol + bd.startspaces + bd.endspaces, oldp);
+      STRCPY(newp + bd.textcol + bd.startspaces + bd.endspaces,
+             oldp + bd.textcol + bd.textlen);
       // replace the line
       ml_replace(lnum, newp, false);
 
@@ -2388,7 +2391,7 @@ void op_insert(oparg_T *oap, int count1)
       char *ins_text = xmemdupz(firstline, (size_t)ins_len);
       // block handled here
       if (u_save(oap->start.lnum, (linenr_T)(oap->end.lnum + 1)) == OK) {
-        block_insert(oap, ins_text, (oap->op_type == OP_INSERT), &bd);
+        block_insert(oap, ins_text, (size_t)ins_len, (oap->op_type == OP_INSERT), &bd);
       }
 
       curwin->w_cursor.col = oap->start.col;
@@ -2460,7 +2463,6 @@ int op_change(oparg_T *oap)
   // Don't repeat the insert when Insert mode ended with CTRL-C.
   if (oap->motion_type == kMTBlockWise
       && oap->start.lnum != oap->end.lnum && !got_int) {
-    int ins_len;
     // Auto-indenting may have changed the indent.  If the cursor was past
     // the indent, exclude that indent change from the inserted text.
     firstline = ml_get(oap->start.lnum);
@@ -2471,7 +2473,7 @@ int op_change(oparg_T *oap)
       bd.textcol += (colnr_T)(new_indent - pre_indent);
     }
 
-    ins_len = ml_get_len(oap->start.lnum) - pre_textlen;
+    int ins_len = ml_get_len(oap->start.lnum) - pre_textlen;
     if (ins_len > 0) {
       // Subsequent calls to ml_get() flush the firstline data - take a
       // copy of the inserted text.
@@ -2496,13 +2498,12 @@ int op_change(oparg_T *oap)
                                + (size_t)vpos.coladd + (size_t)ins_len + 1);
           // copy up to block start
           memmove(newp, oldp, (size_t)bd.textcol);
-          int offset = bd.textcol;
-          memset(newp + offset, ' ', (size_t)vpos.coladd);
-          offset += vpos.coladd;
-          memmove(newp + offset, ins_text, (size_t)ins_len);
-          offset += ins_len;
-          oldp += bd.textcol;
-          STRMOVE(newp + offset, oldp);
+          int newlen = bd.textcol;
+          memset(newp + newlen, ' ', (size_t)vpos.coladd);
+          newlen += vpos.coladd;
+          memmove(newp + newlen, ins_text, (size_t)ins_len);
+          newlen += ins_len;
+          STRCPY(newp + newlen, oldp + bd.textcol);
           ml_replace(linenr, newp, false);
           extmark_splice_cols(curbuf, (int)linenr - 1, bd.textcol,
                               0, vpos.coladd + ins_len, kExtmarkUndo);
@@ -2665,7 +2666,7 @@ static void op_yank_reg(oparg_T *oap, bool message, yankreg_T *reg, bool append)
       char *pnew = xmalloc(strlen(curr->y_array[curr->y_size - 1])
                            + strlen(reg->y_array[0]) + 1);
       STRCPY(pnew, curr->y_array[--j]);
-      STRCAT(pnew, reg->y_array[0]);
+      strcat(pnew, reg->y_array[0]);
       xfree(curr->y_array[j]);
       xfree(reg->y_array[0]);
       curr->y_array[j++] = pnew;
@@ -3430,7 +3431,7 @@ void do_put(int regname, yankreg_T *reg, int dir, int count, int flags)
           totlen = strlen(y_array[y_size - 1]);
           char *newp = xmalloc((size_t)ml_get_len(lnum) - (size_t)col + totlen + 1);
           STRCPY(newp, y_array[y_size - 1]);
-          STRCAT(newp, ptr);
+          strcat(newp, ptr);
           // insert second line
           ml_append(lnum, newp, 0, false);
           new_lnum++;
@@ -4255,11 +4256,13 @@ void charwise_block_prep(pos_T start, pos_T end, struct block_def *bdp, linenr_T
 {
   colnr_T startcol = 0;
   colnr_T endcol = MAXCOL;
-  bool is_oneChar = false;
   colnr_T cs, ce;
   char *p = ml_get(lnum);
+
   bdp->startspaces = 0;
   bdp->endspaces = 0;
+  bdp->is_oneChar = false;
+  bdp->start_char_vcols = 0;
 
   if (lnum == start.lnum) {
     startcol = start.col;
@@ -4267,7 +4270,8 @@ void charwise_block_prep(pos_T start, pos_T end, struct block_def *bdp, linenr_T
       getvcol(curwin, &start, &cs, NULL, &ce);
       if (ce != cs && start.coladd > 0) {
         // Part of a tab selected -- but don't double-count it.
-        bdp->startspaces = (ce - cs + 1) - start.coladd;
+        bdp->start_char_vcols = ce - cs + 1;
+        bdp->startspaces = bdp->start_char_vcols - start.coladd;
         if (bdp->startspaces < 0) {
           bdp->startspaces = 0;
         }
@@ -4287,7 +4291,7 @@ void charwise_block_prep(pos_T start, pos_T end, struct block_def *bdp, linenr_T
                                && utf_head_off(p, p + endcol) == 0)) {
         if (start.lnum == end.lnum && start.col == end.col) {
           // Special case: inside a single char
-          is_oneChar = true;
+          bdp->is_oneChar = true;
           bdp->startspaces = end.coladd - start.coladd + inclusive;
           endcol = startcol;
         } else {
@@ -4300,11 +4304,12 @@ void charwise_block_prep(pos_T start, pos_T end, struct block_def *bdp, linenr_T
   if (endcol == MAXCOL) {
     endcol = ml_get_len(lnum);
   }
-  if (startcol > endcol || is_oneChar) {
+  if (startcol > endcol || bdp->is_oneChar) {
     bdp->textlen = 0;
   } else {
     bdp->textlen = endcol - startcol + inclusive;
   }
+  bdp->textcol = startcol;
   bdp->textstart = p + startcol;
 }
 
@@ -4720,7 +4725,7 @@ bool do_addsub(int op_type, pos_T *pos, int length, linenr_T Prenum1)
         buf2[i++] = ((n >> --bits) & 0x1) ? '1' : '0';
       }
 
-      buf2[i] = '\0';
+      buf2[i] = NUL;
     } else if (pre == 0) {
       vim_snprintf(buf2, ARRAY_SIZE(buf2), "%" PRIu64, (uint64_t)n);
     } else if (pre == '0') {
@@ -4742,7 +4747,7 @@ bool do_addsub(int op_type, pos_T *pos, int length, linenr_T Prenum1)
       }
     }
     *ptr = NUL;
-    STRCAT(buf1, buf2);
+    strcat(buf1, buf2);
     ins_str(buf1);              // insert the new number
     endpos = curwin->w_cursor;
     if (curwin->w_cursor.col) {
@@ -6395,7 +6400,7 @@ static yankreg_T *adjust_clipboard_name(int *name, bool quiet, bool writing)
     goto end;
   }
 
-  if (!eval_has_provider("clipboard")) {
+  if (!eval_has_provider("clipboard", false)) {
     if (batch_change_count <= 1 && !quiet
         && (!clipboard_didwarn || (explicit_cb_reg && !redirecting()))) {
       clipboard_didwarn = true;

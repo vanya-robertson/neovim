@@ -14,14 +14,21 @@ function vim.api.nvim__buf_debug_extmarks(buffer, keys, dot) end
 
 --- @private
 --- @param buffer integer
---- @param first integer
---- @param last integer
-function vim.api.nvim__buf_redraw_range(buffer, first, last) end
-
---- @private
---- @param buffer integer
 --- @return table<string,any>
 function vim.api.nvim__buf_stats(buffer) end
+
+--- @private
+--- EXPERIMENTAL: this API may change in the future.
+---
+--- Sets info for the completion item at the given index. If the info text was
+--- shown in a window, returns the window and buffer ids, or empty dict if not
+--- shown.
+---
+--- @param index integer Completion candidate index
+--- @param opts vim.api.keyset.complete_set Optional parameters.
+---             • info: (string) info text.
+--- @return table<string,any>
+function vim.api.nvim__complete_set(index, opts) end
 
 --- @private
 --- @return string
@@ -91,6 +98,51 @@ function vim.api.nvim__inspect_cell(grid, row, col) end
 --- so this function can be used to force a cache clear in a test.
 ---
 function vim.api.nvim__invalidate_glyph_cache() end
+
+--- @private
+--- EXPERIMENTAL: this API will change in the future.
+---
+--- Get the properties for namespace
+---
+--- @param ns_id integer Namespace
+--- @return vim.api.keyset.ns_opts
+function vim.api.nvim__ns_get(ns_id) end
+
+--- @private
+--- EXPERIMENTAL: this API will change in the future.
+---
+--- Set some properties for namespace
+---
+--- @param ns_id integer Namespace
+--- @param opts vim.api.keyset.ns_opts Optional parameters to set:
+---             • wins: a list of windows to be scoped in
+function vim.api.nvim__ns_set(ns_id, opts) end
+
+--- @private
+--- EXPERIMENTAL: this API may change in the future.
+---
+--- Instruct Nvim to redraw various components.
+---
+--- @param opts vim.api.keyset.redraw Optional parameters.
+---             • win: Target a specific `window-ID` as described below.
+---             • buf: Target a specific buffer number as described below.
+---             • flush: Update the screen with pending updates.
+---             • valid: When present mark `win`, `buf`, or all windows for
+---               redraw. When `true`, only redraw changed lines (useful for
+---               decoration providers). When `false`, forcefully redraw.
+---             • range: Redraw a range in `buf`, the buffer in `win` or the
+---               current buffer (useful for decoration providers). Expects a
+---               tuple `[first, last]` with the first and last line number of
+---               the range, 0-based end-exclusive `api-indexing`.
+---             • cursor: Immediately update cursor position on the screen in
+---               `win` or the current window.
+---             • statuscolumn: Redraw the 'statuscolumn' in `buf`, `win` or
+---               all windows.
+---             • statusline: Redraw the 'statusline' in `buf`, `win` or all
+---               windows.
+---             • winbar: Redraw the 'winbar' in `buf`, `win` or all windows.
+---             • tabline: Redraw the 'tabline'.
+function vim.api.nvim__redraw(opts) end
 
 --- @private
 --- @return any[]
@@ -213,14 +265,14 @@ function vim.api.nvim_buf_add_highlight(buffer, ns_id, hl_group, line, col_start
 --- @return boolean
 function vim.api.nvim_buf_attach(buffer, send_buffer, opts) end
 
---- call a function with buffer as temporary current buffer
+--- Call a function with buffer as temporary current buffer.
 ---
 --- This temporarily switches current buffer to "buffer". If the current
---- window already shows "buffer", the window is not switched If a window
---- inside the current tabpage (including a float) already shows the buffer
---- One of these windows will be set as current window temporarily. Otherwise
---- a temporary scratch window (called the "autocmd window" for historical
---- reasons) will be used.
+--- window already shows "buffer", the window is not switched. If a window
+--- inside the current tabpage (including a float) already shows the buffer,
+--- then one of these windows will be set as current window temporarily.
+--- Otherwise a temporary scratch window (called the "autocmd window" for
+--- historical reasons) will be used.
 ---
 --- This is useful e.g. to call Vimscript functions that only work with the
 --- current buffer/window currently, like `termopen()`.
@@ -623,8 +675,6 @@ function vim.api.nvim_buf_line_count(buffer) end
 ---             • url: A URL to associate with this extmark. In the TUI, the
 ---               OSC 8 control sequence is used to generate a clickable
 ---               hyperlink to this URL.
----             • scoped: boolean that indicates that the extmark should only
----               be displayed in the namespace scope. (experimental)
 --- @return integer
 function vim.api.nvim_buf_set_extmark(buffer, ns_id, line, col, opts) end
 
@@ -822,16 +872,6 @@ function vim.api.nvim_command(command) end
 --- @return string
 function vim.api.nvim_command_output(command) end
 
---- Set info for the completion candidate index. if the info was shown in a
---- window, then the window and buffer ids are returned for further
---- customization. If the text was not shown, an empty dict is returned.
----
---- @param index integer the completion candidate index
---- @param opts vim.api.keyset.complete_set Optional parameters.
----             • info: (string) info text.
---- @return table<string,any>
-function vim.api.nvim_complete_set(index, opts) end
-
 --- Create or get an autocommand group `autocmd-groups`.
 ---
 --- To get an existing group id, do:
@@ -897,8 +937,8 @@ function vim.api.nvim_create_augroup(name, opts) end
 ---             • callback (function|string) optional: Lua function (or
 ---               Vimscript function name, if string) called when the event(s)
 ---               is triggered. Lua callback can return a truthy value (not
----               `false` or `nil`) to delete the autocommand. Receives a
----               table argument with these keys:
+---               `false` or `nil`) to delete the autocommand. Receives one
+---               argument, a table with these keys:              *event-args*
 ---               • id: (number) autocommand id
 ---               • event: (string) name of the triggered event
 ---                 `autocmd-events`
@@ -907,7 +947,7 @@ function vim.api.nvim_create_augroup(name, opts) end
 ---               • buf: (number) expanded value of <abuf>
 ---               • file: (string) expanded value of <afile>
 ---               • data: (any) arbitrary data passed from
----                 `nvim_exec_autocmds()`
+---                 `nvim_exec_autocmds()`                        *event-data*
 ---             • command (string) optional: Vim command to execute on event.
 ---               Cannot be used with {callback}
 ---             • once (boolean) optional: defaults to false. Run the
@@ -1708,13 +1748,15 @@ function vim.api.nvim_open_term(buffer, opts) end
 ---
 ---               • title: Title (optional) in window border, string or list.
 ---                 List should consist of `[text, highlight]` tuples. If
----                 string, the default highlight group is `FloatTitle`.
+---                 string, or a tuple lacks a highlight, the default
+---                 highlight group is `FloatTitle`.
 ---               • title_pos: Title position. Must be set with `title`
 ---                 option. Value can be one of "left", "center", or "right".
 ---                 Default is `"left"`.
 ---               • footer: Footer (optional) in window border, string or
 ---                 list. List should consist of `[text, highlight]` tuples.
----                 If string, the default highlight group is `FloatFooter`.
+---                 If string, or a tuple lacks a highlight, the default
+---                 highlight group is `FloatFooter`.
 ---               • footer_pos: Footer position. Must be set with `footer`
 ---                 option. Value can be one of "left", "center", or "right".
 ---                 Default is `"left"`.
@@ -1868,7 +1910,7 @@ function vim.api.nvim_set_current_win(window) end
 --- Note: this function should not be called often. Rather, the callbacks
 --- themselves can be used to throttle unneeded callbacks. the `on_start`
 --- callback can return `false` to disable the provider until the next redraw.
---- Similarly, return `false` in `on_win` will skip the `on_lines` calls for
+--- Similarly, return `false` in `on_win` will skip the `on_line` calls for
 --- that window (but any extmarks set in `on_win` will still be used). A
 --- plugin managing multiple sources of decoration should ideally only set one
 --- provider, and merge the sources internally. You can use multiple `ns_id`
@@ -1877,10 +1919,10 @@ function vim.api.nvim_set_current_win(window) end
 --- Note: doing anything other than setting extmarks is considered
 --- experimental. Doing things like changing options are not explicitly
 --- forbidden, but is likely to have unexpected consequences (such as 100% CPU
---- consumption). doing `vim.rpcnotify` should be OK, but `vim.rpcrequest` is
+--- consumption). Doing `vim.rpcnotify` should be OK, but `vim.rpcrequest` is
 --- quite dubious for the moment.
 ---
---- Note: It is not allowed to remove or update extmarks in 'on_line'
+--- Note: It is not allowed to remove or update extmarks in `on_line`
 --- callbacks.
 ---
 --- @param ns_id integer Namespace id from `nvim_create_namespace()`
@@ -1898,7 +1940,7 @@ function vim.api.nvim_set_current_win(window) end
 ---
 ---             • on_win: called when starting to redraw a specific window.
 --- ```
----                ["win", winid, bufnr, topline, botline]
+---                ["win", winid, bufnr, toprow, botrow]
 --- ```
 ---
 ---             • on_line: called for each buffer line being redrawn. (The
@@ -2091,13 +2133,6 @@ function vim.api.nvim_tabpage_set_var(tabpage, name, value) end
 --- @param win integer Window handle, must already belong to {tabpage}
 function vim.api.nvim_tabpage_set_win(tabpage, win) end
 
---- Adds the namespace scope to the window.
----
---- @param window integer Window handle, or 0 for current window
---- @param ns_id integer the namespace to add
---- @return boolean
-function vim.api.nvim_win_add_ns(window, ns_id) end
-
 --- Calls a function with window as temporary current window.
 ---
 --- @param window integer Window handle, or 0 for current window
@@ -2149,12 +2184,6 @@ function vim.api.nvim_win_get_cursor(window) end
 --- @param window integer Window handle, or 0 for current window
 --- @return integer
 function vim.api.nvim_win_get_height(window) end
-
---- Gets all the namespaces scopes associated with a window.
----
---- @param window integer Window handle, or 0 for current window
---- @return integer[]
-function vim.api.nvim_win_get_ns(window) end
 
 --- Gets the window number
 ---
@@ -2208,13 +2237,6 @@ function vim.api.nvim_win_hide(window) end
 --- @param window integer Window handle, or 0 for current window
 --- @return boolean
 function vim.api.nvim_win_is_valid(window) end
-
---- Removes the namespace scope from the window.
----
---- @param window integer Window handle, or 0 for current window
---- @param ns_id integer the namespace to remove
---- @return boolean
-function vim.api.nvim_win_remove_ns(window, ns_id) end
 
 --- Sets the current buffer in a window, without side effects
 ---

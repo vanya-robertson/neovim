@@ -26,13 +26,13 @@ error('Cannot require a meta file')
 --- @field url? boolean
 --- @field hl_mode? string
 ---
---- @field virt_text? {[1]: string, [2]: string}[]
+--- @field virt_text? [string, string][]
 --- @field virt_text_hide? boolean
 --- @field virt_text_repeat_linebreak? boolean
 --- @field virt_text_win_col? integer
 --- @field virt_text_pos? string
 ---
---- @field virt_lines? {[1]: string, [2]: string}[][]
+--- @field virt_lines? [string, string][][]
 --- @field virt_lines_above? boolean
 --- @field virt_lines_leftcol? boolean
 ---
@@ -124,7 +124,7 @@ error('Cannot require a meta file')
 --- @field commalist boolean
 --- @field flaglist boolean
 --- @field was_set boolean
---- @field last_set_id integer
+--- @field last_set_sid integer
 --- @field last_set_linenr integer
 --- @field last_set_chan integer
 --- @field type 'string'|'boolean'|'number'

@@ -7,9 +7,24 @@ local eq = t.eq
 local insert = n.insert
 local exec_lua = n.exec_lua
 local pcall_err = t.pcall_err
-local is_os = t.is_os
 local api = n.api
 local fn = n.fn
+
+local get_query_result_code = [[
+  function get_query_result(query_text)
+    cquery = vim.treesitter.query.parse("c", query_text)
+    parser = vim.treesitter.get_parser(0, "c")
+    tree = parser:parse()[1]
+    res = {}
+    for cid, node in cquery:iter_captures(tree:root(), 0) do
+      -- can't transmit node over RPC. just check the name, range, and text
+      local text = vim.treesitter.get_node_text(node, 0)
+      local range = {node:range()}
+      table.insert(res, { cquery.captures[cid], node:type(), range, text })
+    end
+    return res
+  end
+]]
 
 describe('treesitter query API', function()
   before_each(function()
@@ -72,11 +87,14 @@ void ui_refresh(void)
       return exec_lua(
         [[
           local query, n = ...
-          local before = vim.uv.hrtime()
+          local before = vim.api.nvim__stats().ts_query_parse_count
+          collectgarbage("stop")
           for i=1, n, 1 do
             cquery = vim.treesitter.query.parse("c", ...)
           end
-          local after = vim.uv.hrtime()
+          collectgarbage("restart")
+          collectgarbage("collect")
+          local after = vim.api.nvim__stats().ts_query_parse_count
           return after - before
         ]],
         long_query,
@@ -84,15 +102,9 @@ void ui_refresh(void)
       )
     end
 
-    local firstrun = q(1)
-    local manyruns = q(100)
-
-    -- First run should be at least 200x slower than an 100 subsequent runs.
-    local factor = is_os('win') and 100 or 200
-    assert(
-      factor * manyruns < firstrun,
-      ('firstrun: %f ms, manyruns: %f ms'):format(firstrun / 1e6, manyruns / 1e6)
-    )
+    eq(1, q(1))
+    -- cache is cleared by garbage collection even if valid "cquery" reference is kept around
+    eq(1, q(100))
   end)
 
   it('supports query and iter by capture (iter_captures)', function()
@@ -237,6 +249,61 @@ void ui_refresh(void)
     }, res)
   end)
 
+  it('returns quantified matches in order of range #29344', function()
+    insert([[
+    int main() {
+      int a, b, c, d, e, f, g, h, i;
+      a = MIN(0, 1);
+      b = MIN(0, 1);
+      c = MIN(0, 1);
+      d = MIN(0, 1);
+      e = MIN(0, 1);
+      f = MIN(0, 1);
+      g = MIN(0, 1);
+      h = MIN(0, 1);
+      i = MIN(0, 1);
+    }
+    ]])
+
+    local res = exec_lua(
+      [[
+        cquery = vim.treesitter.query.parse("c", ...)
+        parser = vim.treesitter.get_parser(0, "c")
+        tree = parser:parse()[1]
+        res = {}
+        for pattern, match in cquery:iter_matches(tree:root(), 0, 7, 14, { all = true }) do
+          -- can't transmit node over RPC. just check the name and range
+          local mrepr = {}
+          for cid, nodes in pairs(match) do
+            for _, node in ipairs(nodes) do
+              table.insert(mrepr, { '@' .. cquery.captures[cid], node:type(), node:range() })
+            end
+          end
+          table.insert(res, {pattern, mrepr})
+        end
+        return res
+      ]],
+      '(expression_statement (assignment_expression (call_expression)))+ @funccall'
+    )
+
+    eq({
+      {
+        1,
+        {
+          { '@funccall', 'expression_statement', 2, 2, 2, 16 },
+          { '@funccall', 'expression_statement', 3, 2, 3, 16 },
+          { '@funccall', 'expression_statement', 4, 2, 4, 16 },
+          { '@funccall', 'expression_statement', 5, 2, 5, 16 },
+          { '@funccall', 'expression_statement', 6, 2, 6, 16 },
+          { '@funccall', 'expression_statement', 7, 2, 7, 16 },
+          { '@funccall', 'expression_statement', 8, 2, 8, 16 },
+          { '@funccall', 'expression_statement', 9, 2, 9, 16 },
+          { '@funccall', 'expression_statement', 10, 2, 10, 16 },
+        },
+      },
+    }, res)
+  end)
+
   it('can match special regex characters like \\ * + ( with `vim-match?`', function()
     insert('char* astring = "\\n"; (1 + 1) * 2 != 2;')
 
@@ -295,21 +362,7 @@ void ui_refresh(void)
         return 0;
       }
     ]])
-    exec_lua([[
-      function get_query_result(query_text)
-        cquery = vim.treesitter.query.parse("c", query_text)
-        parser = vim.treesitter.get_parser(0, "c")
-        tree = parser:parse()[1]
-        res = {}
-        for cid, node in cquery:iter_captures(tree:root(), 0) do
-          -- can't transmit node over RPC. just check the name, range, and text
-          local text = vim.treesitter.get_node_text(node, 0)
-          local range = {node:range()}
-          table.insert(res, { cquery.captures[cid], node:type(), range, text })
-        end
-        return res
-      end
-    ]])
+    exec_lua(get_query_result_code)
 
     local res0 = exec_lua(
       [[return get_query_result(...)]],
@@ -335,6 +388,38 @@ void ui_refresh(void)
       { 'fizzbuzz-strings', 'string_literal', { 8, 15, 8, 34 }, '"number= %d Fizz\\n"' },
       { 'fizzbuzz-strings', 'string_literal', { 10, 15, 10, 34 }, '"number= %d Buzz\\n"' },
     }, res1)
+  end)
+
+  it('supports builtin predicate has-ancestor?', function()
+    insert([[
+      int x = 123;
+      enum C { y = 124 };
+      int main() { int z = 125; }]])
+    exec_lua(get_query_result_code)
+
+    local result = exec_lua(
+      [[return get_query_result(...)]],
+      [[((number_literal) @literal (#has-ancestor? @literal "function_definition"))]]
+    )
+    eq({ { 'literal', 'number_literal', { 2, 21, 2, 24 }, '125' } }, result)
+
+    result = exec_lua(
+      [[return get_query_result(...)]],
+      [[((number_literal) @literal (#has-ancestor? @literal "function_definition" "enum_specifier"))]]
+    )
+    eq({
+      { 'literal', 'number_literal', { 1, 13, 1, 16 }, '124' },
+      { 'literal', 'number_literal', { 2, 21, 2, 24 }, '125' },
+    }, result)
+
+    result = exec_lua(
+      [[return get_query_result(...)]],
+      [[((number_literal) @literal (#not-has-ancestor? @literal "enum_specifier"))]]
+    )
+    eq({
+      { 'literal', 'number_literal', { 0, 8, 0, 11 }, '123' },
+      { 'literal', 'number_literal', { 2, 21, 2, 24 }, '125' },
+    }, result)
   end)
 
   it('allows loading query with escaped quotes and capture them `#{lua,vim}-match`?', function()

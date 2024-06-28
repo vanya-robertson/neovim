@@ -974,8 +974,8 @@ vim.bo.comments = vim.o.comments
 vim.bo.com = vim.bo.comments
 
 --- A template for a comment.  The "%s" in the value is replaced with the
---- comment text.  For example, C uses "/*%s*/". Currently only used to
---- add markers for folding, see `fold-marker`.
+--- comment text, and should be padded with a space when possible.
+--- Used for `commenting` and to add markers for folding, see `fold-marker`.
 ---
 --- @type string
 vim.o.commentstring = ""
@@ -1061,6 +1061,10 @@ vim.bo.cfu = vim.bo.completefunc
 --- 	    completion in the preview window.  Only works in
 --- 	    combination with "menu" or "menuone".
 ---
+---    popup    Show extra information about the currently selected
+--- 	    completion in a popup window.  Only works in combination
+--- 	    with "menu" or "menuone".  Overrides "preview".
+---
 ---    noinsert Do not insert any text for a match until the user selects
 --- 	    a match from the menu. Only works in combination with
 --- 	    "menu" or "menuone". No effect if "longest" is present.
@@ -1069,13 +1073,19 @@ vim.bo.cfu = vim.bo.completefunc
 --- 	    select one from the menu. Only works in combination with
 --- 	    "menu" or "menuone".
 ---
----    popup    Show extra information about the currently selected
---- 	    completion in a popup window.  Only works in combination
---- 	    with "menu" or "menuone".  Overrides "preview".
+---    fuzzy    Enable `fuzzy-matching` for completion candidates. This
+--- 	    allows for more flexible and intuitive matching, where
+--- 	    characters can be skipped and matches can be found even
+--- 	    if the exact sequence is not typed.  Only makes a
+--- 	    difference how completion candidates are reduced from the
+--- 	    list of alternatives, but not how the candidates are
+--- 	    collected (using different completion types).
 ---
 --- @type string
 vim.o.completeopt = "menu,preview"
 vim.o.cot = vim.o.completeopt
+vim.bo.completeopt = vim.o.completeopt
+vim.bo.cot = vim.bo.completeopt
 vim.go.completeopt = vim.o.completeopt
 vim.go.cot = vim.go.completeopt
 
@@ -2638,12 +2648,6 @@ vim.go.gfm = vim.go.grepformat
 --- line.  The placeholder "$*" is allowed to specify where the arguments
 --- will be included.  Environment variables are expanded `:set_env`.  See
 --- `option-backslash` about including spaces and backslashes.
---- When your "grep" accepts the "-H" argument, use this to make ":grep"
---- also work well with a single file:
----
---- ```vim
---- 	set grepprg=grep\ -nH
---- ```
 --- Special value: When 'grepprg' is set to "internal" the `:grep` command
 --- works like `:vimgrep`, `:lgrep` like `:lvimgrep`, `:grepadd` like
 --- `:vimgrepadd` and `:lgrepadd` like `:lvimgrepadd`.
@@ -2652,18 +2656,18 @@ vim.go.gfm = vim.go.grepformat
 --- This option cannot be set from a `modeline` or in the `sandbox`, for
 --- security reasons.
 --- This option defaults to:
---- - `rg --vimgrep -uuu $* ...` if ripgrep is available (`:checkhealth`),
---- - `grep -n $* /dev/null` on Unix,
+--- - `rg --vimgrep -uu ` if ripgrep is available (`:checkhealth`),
+--- - `grep -HIn $* /dev/null` on Unix,
 --- - `findstr /n $* nul` on Windows.
 --- Ripgrep can perform additional filtering such as using .gitignore rules
---- and skipping hidden or binary files. This is disabled by default (see the -u option)
+--- and skipping hidden files. This is disabled by default (see the -u option)
 --- to more closely match the behaviour of standard grep.
 --- You can make ripgrep match Vim's case handling using the
 --- -i/--ignore-case and -S/--smart-case options.
 --- An `OptionSet` autocmd can be used to set it up to match automatically.
 ---
 --- @type string
-vim.o.grepprg = "grep -n $* /dev/null"
+vim.o.grepprg = "grep -HIn $* /dev/null"
 vim.o.gp = vim.o.grepprg
 vim.bo.grepprg = vim.o.grepprg
 vim.bo.gp = vim.bo.grepprg
@@ -3825,6 +3829,9 @@ vim.go.lw = vim.go.lispwords
 --- non-breakable space characters as "+". Useful to see the difference
 --- between tabs and spaces and for trailing blanks. Further changed by
 --- the 'listchars' option.
+---
+--- When 'listchars' does not contain "tab" field, tabs are shown as "^I"
+--- or "<09>", like how unprintable characters are displayed.
 ---
 --- The cursor is displayed at the start of the space a Tab character
 --- occupies, not at the end as usual in Normal mode.  To get this cursor
@@ -5787,8 +5794,8 @@ vim.bo.sw = vim.bo.shiftwidth
 --- 	message;  also for quickfix message (e.g., ":cn")
 ---   s	don't give "search hit BOTTOM, continuing at TOP" or	*shm-s*
 --- 	"search hit TOP, continuing at BOTTOM" messages; when using
---- 	the search count do not show "W" after the count message (see
---- 	S below)
+--- 	the search count do not show "W" before the count message
+--- 	(see `shm-S` below)
 ---   t	truncate file message at the start if it is too long	*shm-t*
 --- 	to fit on the command-line, "<" will appear in the left most
 --- 	column; ignored in Ex mode
@@ -5810,7 +5817,11 @@ vim.bo.sw = vim.bo.shiftwidth
 --- 	`:silent` was used for the command; note that this also
 --- 	affects messages from 'autoread' reloading
 ---   S	do not show search count message when searching, e.g.	*shm-S*
---- 	"[1/5]"
+--- 	"[1/5]". When the "S" flag is not present (e.g. search count
+--- 	is shown), the "search hit BOTTOM, continuing at TOP" and
+--- 	"search hit TOP, continuing at BOTTOM" messages are only
+--- 	indicated by a "W" (Mnemonic: Wrapped) letter before the
+--- 	search count statistics.
 ---
 --- This gives you the opportunity to avoid that a change between buffers
 --- requires you to hit <Enter>, but still gives as useful a message as
@@ -6365,8 +6376,7 @@ vim.go.sol = vim.go.startofline
 --- Some of the items from the 'statusline' format are different for
 --- 'statuscolumn':
 ---
---- %l	line number of currently drawn line
---- %r	relative line number of currently drawn line
+--- %l	line number column for currently drawn line
 --- %s	sign column for currently drawn line
 --- %C	fold column for currently drawn line
 ---
@@ -6395,11 +6405,8 @@ vim.go.sol = vim.go.startofline
 --- Examples:
 ---
 --- ```vim
---- 	" Relative number with bar separator and click handlers:
---- 	set statuscolumn=%@SignCb@%s%=%T%@NumCb@%r│%T
----
---- 	" Right aligned relative cursor line number:
---- 	let &stc='%=%{v:relnum?v:relnum:v:lnum} '
+--- 	" Line number with bar separator and click handlers:
+--- 	set statuscolumn=%@SignCb@%s%=%T%@NumCb@%l│%T
 ---
 --- 	" Line numbers in hexadecimal for non wrapped part of lines:
 --- 	let &stc='%=%{v:virtnum>0?"":printf("%x",v:lnum)} '
@@ -7452,6 +7459,7 @@ vim.bo.vts = vim.bo.vartabstop
 ---
 --- Level   Messages ~
 --- ----------------------------------------------------------------------
+--- 1	Enables Lua tracing (see above). Does not produce messages.
 --- 2	When a file is ":source"'ed, or `shada` file is read or written.
 --- 3	UI info, terminal capabilities.
 --- 4	Shell commands.

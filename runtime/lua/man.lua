@@ -35,7 +35,7 @@ local function highlight_line(line, linenr)
   ---@type string[]
   local chars = {}
   local prev_char = ''
-  local overstrike, escape = false, false
+  local overstrike, escape, osc8 = false, false, false
 
   ---@type table<integer,{attr:integer,start:integer,final:integer}>
   local hls = {} -- Store highlight groups as { attr, start, final }
@@ -139,6 +139,12 @@ local function highlight_line(line, linenr)
       prev_char = ''
       byte = byte + #char
       chars[#chars + 1] = char
+    elseif osc8 then
+      -- eat characters until String Terminator or bell
+      if (prev_char == '\027' and char == '\\') or char == '\a' then
+        osc8 = false
+      end
+      prev_char = char
     elseif escape then
       -- Use prev_char to store the escape sequence
       prev_char = prev_char .. char
@@ -157,8 +163,11 @@ local function highlight_line(line, linenr)
           add_attr_hl(match + 0) -- coerce to number
         end
         escape = false
-      elseif not prev_char:match('^%[[\032-\063]*$') then
-        -- Stop looking if this isn't a partial CSI sequence
+      elseif prev_char == ']8;' then
+        osc8 = true
+        escape = false
+      elseif not prev_char:match('^[][][\032-\063]*$') then
+        -- Stop looking if this isn't a partial CSI or OSC sequence
         escape = false
       end
     elseif char == '\027' then
@@ -411,15 +420,13 @@ local function find_man()
   return false
 end
 
----@param pager boolean
-local function set_options(pager)
+local function set_options()
   vim.bo.swapfile = false
   vim.bo.buftype = 'nofile'
   vim.bo.bufhidden = 'unload'
   vim.bo.modified = false
   vim.bo.readonly = true
   vim.bo.modifiable = false
-  vim.b.pager = pager
   vim.bo.filetype = 'man'
 end
 
@@ -475,7 +482,7 @@ local function put_page(page)
   vim.cmd([[silent! keeppatterns keepjumps %s/\s\{199,}/\=repeat(' ', 10)/g]])
   vim.cmd('1') -- Move cursor to first line
   highlight_man_page()
-  set_options(false)
+  set_options()
 end
 
 local function format_candidate(path, psect)
@@ -662,7 +669,8 @@ function M.init_pager()
     vim.cmd.file({ 'man://' .. fn.fnameescape(ref):lower(), mods = { silent = true } })
   end
 
-  set_options(true)
+  vim.g.pager = true
+  set_options()
 end
 
 ---@param count integer
@@ -730,7 +738,7 @@ function M.open_page(count, smods, args)
   if not ok then
     error(ret)
   else
-    set_options(false)
+    set_options()
   end
 
   vim.b.man_sect = sect

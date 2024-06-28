@@ -14,6 +14,7 @@
 #include "nvim/change.h"
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
+#include "nvim/errors.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/typval_defs.h"
@@ -484,7 +485,7 @@ void spell_suggest(int count)
       badlen = get_cursor_line_len() - curwin->w_cursor.col;
     }
     // Find the start of the badly spelled word.
-  } else if (spell_move_to(curwin, FORWARD, true, true, NULL) == 0
+  } else if (spell_move_to(curwin, FORWARD, SMT_ALL, true, NULL) == 0
              || curwin->w_cursor.col > prev_cursor.col) {
     // No bad word or it starts after the cursor: use the word under the
     // cursor.
@@ -642,7 +643,7 @@ void spell_suggest(int count)
     int c = (int)(sug.su_badptr - line);
     memmove(p, line, (size_t)c);
     STRCPY(p + c, stp->st_word);
-    STRCAT(p, sug.su_badptr + stp->st_orglen);
+    strcat(p, sug.su_badptr + stp->st_orglen);
 
     // For redo we use a change-word command.
     ResetRedobuff();
@@ -1637,7 +1638,7 @@ static void suggest_trie_walk(suginfo_T *su, langp_T *lp, char *fword, bool soun
 
             // Append a space to preword when splitting.
             if (!try_compound && !fword_ends) {
-              STRCAT(preword, " ");
+              strcat(preword, " ");
             }
             sp->ts_prewordlen = (uint8_t)strlen(preword);
             sp->ts_splitoff = sp->ts_twordlen;

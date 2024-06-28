@@ -221,7 +221,7 @@ static void changed_lines_invalidate_win(win_T *wp, linenr_T lnum, colnr_T col, 
 void changed_lines_invalidate_buf(buf_T *buf, linenr_T lnum, colnr_T col, linenr_T lnume,
                                   linenr_T xtra)
 {
-  FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
+  FOR_ALL_TAB_WINDOWS(tp, wp) {
     if (wp->w_buffer == buf) {
       changed_lines_invalidate_win(wp, lnum, col, lnume, xtra);
     }
@@ -391,6 +391,10 @@ static void changed_common(buf_T *buf, linenr_T lnum, colnr_T col, linenr_T lnum
           wp->w_last_cursorline += xtra;
         }
       }
+    }
+
+    if (wp == curwin && xtra != 0 && search_hl_has_cursor_lnum >= lnum) {
+      search_hl_has_cursor_lnum += xtra;
     }
   }
 
@@ -1723,12 +1727,12 @@ bool open_line(int dir, int flags, int second_line_indent, bool *did_do_comment)
       // Below, set_indent(newindent, SIN_INSERT) will insert the
       // whitespace needed before the comment char.
       for (int i = 0; i < padding; i++) {
-        STRCAT(leader, " ");
+        strcat(leader, " ");
         less_cols--;
         newcol++;
       }
     }
-    STRCAT(leader, p_extra);
+    strcat(leader, p_extra);
     p_extra = leader;
     did_ai = true;          // So truncating blanks works with comments
     less_cols -= lead_len;

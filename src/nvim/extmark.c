@@ -54,12 +54,12 @@
 /// must not be used during iteration!
 void extmark_set(buf_T *buf, uint32_t ns_id, uint32_t *idp, int row, colnr_T col, int end_row,
                  colnr_T end_col, DecorInline decor, uint16_t decor_flags, bool right_gravity,
-                 bool end_right_gravity, bool no_undo, bool invalidate, bool scoped, Error *err)
+                 bool end_right_gravity, bool no_undo, bool invalidate, Error *err)
 {
   uint32_t *ns = map_put_ref(uint32_t, uint32_t)(buf->b_extmark_ns, ns_id, NULL, NULL);
   uint32_t id = idp ? *idp : 0;
 
-  uint16_t flags = mt_flags(right_gravity, no_undo, invalidate, decor.ext, scoped) | decor_flags;
+  uint16_t flags = mt_flags(right_gravity, no_undo, invalidate, decor.ext) | decor_flags;
   if (id == 0) {
     id = ++*ns;
   } else {
@@ -117,7 +117,14 @@ static void extmark_setraw(buf_T *buf, uint64_t mark, int row, colnr_T col, bool
   MarkTreeIter itr[1] = { 0 };
   MTKey key = marktree_lookup(buf->b_marktree, mark, itr);
   if (key.pos.row < 0 || (key.pos.row == row && key.pos.col == col)) {
+    // Does this hold? If it doesn't, we should still revalidate.
+    assert(!invalid || !mt_invalid(key));
     return;
+  }
+
+  // Key already revalidated(how?) Avoid adding to decor again.
+  if (invalid && !mt_invalid(key)) {
+    invalid = false;
   }
 
   // Only the position before undo needs to be redrawn here,
@@ -140,8 +147,8 @@ static void extmark_setraw(buf_T *buf, uint64_t mark, int row, colnr_T col, bool
   marktree_move(buf->b_marktree, itr, row, col);
 
   if (invalid) {
-    MTPos end = marktree_get_altpos(buf->b_marktree, key, NULL);
-    buf_put_decor(buf, mt_decor(key), row, end.row);
+    row2 = mt_paired(key) ? marktree_get_altpos(buf->b_marktree, key, NULL).row : row;
+    buf_put_decor(buf, mt_decor(key), row, row2);
   } else if (key.flags & MT_FLAG_DECOR_SIGNTEXT && buf->b_signcols.autom) {
     buf_signcols_count_range(buf, row1, row2, 0, kNone);
   }
@@ -206,7 +213,9 @@ bool extmark_clear(buf_T *buf, uint32_t ns_id, int l_row, colnr_T l_col, int u_r
     }
   }
 
-  bool marks_cleared = false;
+  bool marks_cleared_any = false;
+  bool marks_cleared_all = l_row == 0 && l_col == 0;
+
   MarkTreeIter itr[1] = { 0 };
   marktree_itr_get(buf->b_marktree, l_row, l_col, itr);
   while (true) {
@@ -214,16 +223,29 @@ bool extmark_clear(buf_T *buf, uint32_t ns_id, int l_row, colnr_T l_col, int u_r
     if (mark.pos.row < 0
         || mark.pos.row > u_row
         || (mark.pos.row == u_row && mark.pos.col > u_col)) {
+      if (mark.pos.row >= 0) {
+        marks_cleared_all = false;
+      }
       break;
     }
     if (mark.ns == ns_id || all_ns) {
-      marks_cleared = true;
+      marks_cleared_any = true;
       extmark_del(buf, itr, mark, true);
     } else {
       marktree_itr_next(buf->b_marktree, itr);
     }
   }
-  return marks_cleared;
+
+  if (marks_cleared_all) {
+    if (all_ns) {
+      map_destroy(uint32_t, buf->b_extmark_ns);
+      *buf->b_extmark_ns = (Map(uint32_t, uint32_t)) MAP_INIT;
+    } else {
+      map_del(uint32_t, uint32_t)(buf->b_extmark_ns, ns_id, NULL);
+    }
+  }
+
+  return marks_cleared_any;
 }
 
 /// @return  the position of marks between a range,
@@ -315,10 +337,6 @@ MTPair extmark_from_id(buf_T *buf, uint32_t ns_id, uint32_t id)
 /// free extmarks from the buffer
 void extmark_free_all(buf_T *buf)
 {
-  if (!map_size(buf->b_extmark_ns)) {
-    return;
-  }
-
   MarkTreeIter itr[1] = { 0 };
   marktree_itr_get(buf->b_marktree, 0, 0, itr);
   while (true) {

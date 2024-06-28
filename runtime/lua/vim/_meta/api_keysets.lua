@@ -197,6 +197,9 @@ error('Cannot require a meta file')
 --- @field desc? string
 --- @field replace_keycodes? boolean
 
+--- @class vim.api.keyset.ns_opts
+--- @field wins? any[]
+
 --- @class vim.api.keyset.open_term
 --- @field on_input? function
 --- @field force_crlf? boolean
@@ -206,6 +209,18 @@ error('Cannot require a meta file')
 --- @field win? integer
 --- @field buf? integer
 --- @field filetype? string
+
+--- @class vim.api.keyset.redraw
+--- @field flush? boolean
+--- @field cursor? boolean
+--- @field valid? boolean
+--- @field statuscolumn? boolean
+--- @field statusline? boolean
+--- @field tabline? boolean
+--- @field winbar? boolean
+--- @field range? any[]
+--- @field win? integer
+--- @field buf? integer
 
 --- @class vim.api.keyset.runtime
 --- @field is_lua? boolean
@@ -253,7 +268,6 @@ error('Cannot require a meta file')
 --- @field undo_restore? boolean
 --- @field url? string
 --- @field scoped? boolean
---- @field _subpriority? integer
 
 --- @class vim.api.keyset.user_command
 --- @field addr? any

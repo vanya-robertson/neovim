@@ -4353,11 +4353,9 @@ endfunc
 " Test for shortening/simplifying the file name when opening the
 " quickfix window or when displaying the quickfix list
 func Test_shorten_fname()
-  if !has('unix')
-    return
-  endif
+  CheckUnix
   %bwipe
-  " Create a quickfix list with a absolute path filename
+  " Create a quickfix list with an absolute path filename
   let fname = getcwd() . '/test_quickfix.vim'
   call setqflist([], ' ', {'lines':[fname . ":20:Line20"], 'efm':'%f:%l:%m'})
   call assert_equal(fname, bufname('test_quickfix.vim'))
@@ -4366,7 +4364,7 @@ func Test_shorten_fname()
   call assert_equal('test_quickfix.vim', bufname('test_quickfix.vim'))
   cclose
   %bwipe
-  " Create a quickfix list with a absolute path filename
+  " Create a quickfix list with an absolute path filename
   call setqflist([], ' ', {'lines':[fname . ":20:Line20"], 'efm':'%f:%l:%m'})
   call assert_equal(fname, bufname('test_quickfix.vim'))
   " Displaying the quickfix list should simplify the file path
@@ -6367,6 +6365,76 @@ func Test_efm_format_b()
     \ getqflist())
   %bw!
   call setqflist([], 'f')
+endfunc
+
+func XbufferTests_range(cchar)
+  call s:setup_commands(a:cchar)
+
+  enew!
+  let lines =<< trim END
+    Xtestfile7:700:10:Line 700
+    Xtestfile8:800:15:Line 800
+  END
+  silent! call setline(1, lines)
+  norm! Vy
+  " Note: We cannot use :Xbuffer here,
+  " it doesn't properly fail, so we need to
+  " test using the raw c/l commands.
+  " (also further down)
+  if (a:cchar == 'c')
+     exe "'<,'>cbuffer!"
+  else
+    exe "'<,'>lbuffer!"
+  endif
+  let l = g:Xgetlist()
+  call assert_true(len(l) == 1 &&
+	\ l[0].lnum == 700 && l[0].col == 10 && l[0].text ==# 'Line 700')
+
+  enew!
+  let lines =<< trim END
+    Xtestfile9:900:55:Line 900
+    Xtestfile10:950:66:Line 950
+  END
+  silent! call setline(1, lines)
+  if (a:cchar == 'c')
+    1cgetbuffer
+  else
+    1lgetbuffer
+  endif
+  let l = g:Xgetlist()
+  call assert_true(len(l) == 1 &&
+	\ l[0].lnum == 900 && l[0].col == 55 && l[0].text ==# 'Line 900')
+
+  enew!
+  let lines =<< trim END
+    Xtestfile11:700:20:Line 700
+    Xtestfile12:750:25:Line 750
+  END
+  silent! call setline(1, lines)
+  if (a:cchar == 'c')
+    1,1caddbuffer
+  else
+    1,1laddbuffer
+  endif
+  let l = g:Xgetlist()
+  call assert_true(len(l) == 2 &&
+	\ l[0].lnum == 900 && l[0].col == 55 && l[0].text ==# 'Line 900' &&
+	\ l[1].lnum == 700 && l[1].col == 20 && l[1].text ==# 'Line 700')
+  enew!
+
+  " Check for invalid range
+  " Using Xbuffer will not run the range check in the cbuffer/lbuffer
+  " commands. So directly call the commands.
+  if (a:cchar == 'c')
+      call assert_fails('900,999caddbuffer', 'E16:')
+  else
+      call assert_fails('900,999laddbuffer', 'E16:')
+  endif
+endfunc
+
+func Test_cbuffer_range()
+  call XbufferTests_range('c')
+  call XbufferTests_range('l')
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

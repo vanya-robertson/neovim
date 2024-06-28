@@ -23,12 +23,12 @@ module.exports = async ({ github, context }) => {
     reviewers.add("lewis6991");
   }
 
-  if (labels.includes("defaults")) {
-    reviewers.add("gpanders");
+  if (labels.includes("comment")) {
+    reviewers.add("echasnovski");
   }
 
-  if (labels.includes("dependencies")) {
-    reviewers.add("jamessan");
+  if (labels.includes("defaults")) {
+    reviewers.add("gpanders");
   }
 
   if (labels.includes("diagnostic")) {
@@ -39,28 +39,34 @@ module.exports = async ({ github, context }) => {
     reviewers.add("lewis6991");
   }
 
-  if (labels.includes("distribution")) {
-    reviewers.add("jamessan");
-  }
-
   if (labels.includes("documentation")) {
     reviewers.add("clason");
   }
 
-  if (labels.includes("extmarks")) {
+  if (labels.includes("editorconfig")) {
+    reviewers.add("gpanders");
+  }
+
+  if (labels.includes("marks")) {
     reviewers.add("bfredl");
   }
 
   if (labels.includes("filetype")) {
     reviewers.add("clason");
     reviewers.add("gpanders");
-    reviewers.add("smjonas");
+  }
+
+  if (labels.includes("inccommand")) {
+    reviewers.add("famiu");
   }
 
   if (labels.includes("lsp")) {
-    reviewers.add("folke");
     reviewers.add("MariaSolOs");
     reviewers.add("mfussenegger");
+  }
+
+  if (labels.includes("netrw")) {
+    reviewers.add("justinmk");
   }
 
   if (labels.includes("options")) {
@@ -76,6 +82,10 @@ module.exports = async ({ github, context }) => {
     reviewers.add("justinmk");
   }
 
+  if (labels.includes("snippet")) {
+    reviewers.add("MariaSolOs");
+  }
+
   if (labels.includes("statusline")) {
     reviewers.add("famiu");
   }
@@ -88,6 +98,7 @@ module.exports = async ({ github, context }) => {
     reviewers.add("bfredl");
     reviewers.add("clason");
     reviewers.add("lewis6991");
+    reviewers.add("wookayin");
   }
 
   if (labels.includes("tui")) {

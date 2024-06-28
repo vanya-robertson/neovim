@@ -1,7 +1,7 @@
 if exists('s:did_load')
   " Align Nvim defaults to Vim.
   set backspace=
-  set commentstring=/*%s*/
+  set commentstring=/*\ %s\ */
   set complete=.,w,b,u,t,i
   set define=^\\s*#\\s*define
   set directory^=.
@@ -50,6 +50,9 @@ mapclear
 mapclear!
 aunmenu *
 tlunmenu *
+
+" Undo the 'grepprg' and 'grepformat' setting in _defaults.lua.
+set grepprg& grepformat&
 
 " roughly equivalent to test_setmouse() in Vim
 func Ntest_setmouse(row, col)

@@ -46,6 +46,7 @@
 
 #include "nvim/assert_defs.h"
 #include "nvim/buffer_defs.h"
+#include "nvim/errors.h"
 #include "nvim/fileio.h"
 #include "nvim/gettext_defs.h"
 #include "nvim/globals.h"
@@ -677,7 +678,7 @@ static int mf_trans_add(memfile_T *mfp, bhdr_T *hp)
 ///          The old number           When not found.
 blocknr_T mf_trans_del(memfile_T *mfp, blocknr_T old_nr)
 {
-  blocknr_T *num = map_ref(int64_t, int64_t)(&mfp->mf_trans, old_nr, false);
+  blocknr_T *num = map_ref(int64_t, int64_t)(&mfp->mf_trans, old_nr, NULL);
   if (num == NULL) {  // not found
     return old_nr;
   }

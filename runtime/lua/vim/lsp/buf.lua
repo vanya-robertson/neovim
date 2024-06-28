@@ -35,13 +35,13 @@ function M.hover()
   request(ms.textDocument_hover, params)
 end
 
-local function request_with_options(name, params, options)
+local function request_with_opts(name, params, opts)
   local req_handler --- @type function?
-  if options then
+  if opts then
     req_handler = function(err, result, ctx, config)
       local client = assert(vim.lsp.get_client_by_id(ctx.client_id))
       local handler = client.handlers[name] or vim.lsp.handlers[name]
-      handler(err, result, ctx, vim.tbl_extend('force', config or {}, options))
+      handler(err, result, ctx, vim.tbl_extend('force', config or {}, opts))
     end
   end
   request(name, params, req_handler)
@@ -62,14 +62,13 @@ end
 --- vim.lsp.buf.references(nil, { on_list = on_list })
 --- ```
 ---
---- If you prefer loclist do something like this:
+--- If you prefer loclist instead of qflist:
 --- ```lua
---- local function on_list(options)
----   vim.fn.setloclist(0, {}, ' ', options)
----   vim.cmd.lopen()
---- end
+--- vim.lsp.buf.definition({ loclist = true })
+--- vim.lsp.buf.references(nil, { loclist = true })
 --- ```
 --- @field on_list? fun(t: vim.lsp.LocationOpts.OnList)
+--- @field loclist? boolean
 
 --- @class vim.lsp.LocationOpts.OnList
 --- @field items table[] Structured like |setqflist-what|
@@ -83,32 +82,32 @@ end
 
 --- Jumps to the declaration of the symbol under the cursor.
 --- @note Many servers do not implement this method. Generally, see |vim.lsp.buf.definition()| instead.
---- @param options? vim.lsp.LocationOpts
-function M.declaration(options)
+--- @param opts? vim.lsp.LocationOpts
+function M.declaration(opts)
   local params = util.make_position_params()
-  request_with_options(ms.textDocument_declaration, params, options)
+  request_with_opts(ms.textDocument_declaration, params, opts)
 end
 
 --- Jumps to the definition of the symbol under the cursor.
---- @param options? vim.lsp.LocationOpts
-function M.definition(options)
+--- @param opts? vim.lsp.LocationOpts
+function M.definition(opts)
   local params = util.make_position_params()
-  request_with_options(ms.textDocument_definition, params, options)
+  request_with_opts(ms.textDocument_definition, params, opts)
 end
 
 --- Jumps to the definition of the type of the symbol under the cursor.
---- @param options? vim.lsp.LocationOpts
-function M.type_definition(options)
+--- @param opts? vim.lsp.LocationOpts
+function M.type_definition(opts)
   local params = util.make_position_params()
-  request_with_options(ms.textDocument_typeDefinition, params, options)
+  request_with_opts(ms.textDocument_typeDefinition, params, opts)
 end
 
 --- Lists all the implementations for the symbol under the cursor in the
 --- quickfix window.
---- @param options? vim.lsp.LocationOpts
-function M.implementation(options)
+--- @param opts? vim.lsp.LocationOpts
+function M.implementation(opts)
   local params = util.make_position_params()
-  request_with_options(ms.textDocument_implementation, params, options)
+  request_with_opts(ms.textDocument_implementation, params, opts)
 end
 
 --- Displays signature information about the symbol under the cursor in a
@@ -136,7 +135,7 @@ end
 ---@param mode "v"|"V"
 ---@return table {start={row,col}, end={row,col}} using (1, 0) indexing
 local function range_from_selection(bufnr, mode)
-  -- TODO: Use `vim.region()` instead https://github.com/neovim/neovim/pull/13896
+  -- TODO: Use `vim.fn.getregionpos()` instead.
 
   -- [bufnum, lnum, col, off]; both row and column 1-indexed
   local start = vim.fn.getpos('v')
@@ -206,32 +205,44 @@ end
 --- Range to format.
 --- Table must contain `start` and `end` keys with {row,col} tuples using
 --- (1,0) indexing.
+--- Can also be a list of tables that contain `start` and `end` keys as described above,
+--- in which case `textDocument/rangesFormatting` support is required.
 --- (Default: current selection in visual mode, `nil` in other modes,
 --- formatting the full buffer)
---- @field range? {start:integer[],end:integer[]}
+--- @field range? {start:[integer,integer],end:[integer, integer]}|{start:[integer,integer],end:[integer,integer]}[]
 
 --- Formats a buffer using the attached (and optionally filtered) language
 --- server clients.
 ---
---- @param options? vim.lsp.buf.format.Opts
-function M.format(options)
-  options = options or {}
-  local bufnr = options.bufnr or api.nvim_get_current_buf()
+--- @param opts? vim.lsp.buf.format.Opts
+function M.format(opts)
+  opts = opts or {}
+  local bufnr = opts.bufnr or api.nvim_get_current_buf()
   local mode = api.nvim_get_mode().mode
-  local range = options.range
+  local range = opts.range
+  -- Try to use visual selection if no range is given
   if not range and mode == 'v' or mode == 'V' then
     range = range_from_selection(bufnr, mode)
   end
-  local method = range and ms.textDocument_rangeFormatting or ms.textDocument_formatting
+
+  local passed_multiple_ranges = (range and #range ~= 0 and type(range[1]) == 'table')
+  local method ---@type string
+  if passed_multiple_ranges then
+    method = ms.textDocument_rangesFormatting
+  elseif range then
+    method = ms.textDocument_rangeFormatting
+  else
+    method = ms.textDocument_formatting
+  end
 
   local clients = vim.lsp.get_clients({
-    id = options.id,
+    id = opts.id,
     bufnr = bufnr,
-    name = options.name,
+    name = opts.name,
     method = method,
   })
-  if options.filter then
-    clients = vim.tbl_filter(options.filter, clients)
+  if opts.filter then
+    clients = vim.tbl_filter(opts.filter, clients)
   end
 
   if #clients == 0 then
@@ -242,20 +253,24 @@ function M.format(options)
   --- @param params lsp.DocumentFormattingParams
   --- @return lsp.DocumentFormattingParams
   local function set_range(client, params)
-    if range then
-      local range_params =
-        util.make_given_range_params(range.start, range['end'], bufnr, client.offset_encoding)
-      params.range = range_params.range
+    local to_lsp_range = function(r) ---@return lsp.DocumentRangeFormattingParams|lsp.DocumentRangesFormattingParams
+      return util.make_given_range_params(r.start, r['end'], bufnr, client.offset_encoding).range
+    end
+
+    if passed_multiple_ranges then
+      params.ranges = vim.tbl_map(to_lsp_range, range)
+    elseif range then
+      params.range = to_lsp_range(range)
     end
     return params
   end
 
-  if options.async then
+  if opts.async then
     local function do_format(idx, client)
       if not client then
         return
       end
-      local params = set_range(client, util.make_formatting_params(options.formatting_options))
+      local params = set_range(client, util.make_formatting_params(opts.formatting_options))
       client.request(method, params, function(...)
         local handler = client.handlers[method] or vim.lsp.handlers[method]
         handler(...)
@@ -264,9 +279,9 @@ function M.format(options)
     end
     do_format(next(clients))
   else
-    local timeout_ms = options.timeout_ms or 1000
+    local timeout_ms = opts.timeout_ms or 1000
     for _, client in pairs(clients) do
-      local params = set_range(client, util.make_formatting_params(options.formatting_options))
+      local params = set_range(client, util.make_formatting_params(opts.formatting_options))
       local result, err = client.request_sync(method, params, timeout_ms, bufnr)
       if result and result.result then
         util.apply_text_edits(result.result, bufnr, client.offset_encoding)
@@ -295,18 +310,18 @@ end
 ---
 ---@param new_name string|nil If not provided, the user will be prompted for a new
 ---                name using |vim.ui.input()|.
----@param options? vim.lsp.buf.rename.Opts Additional options:
-function M.rename(new_name, options)
-  options = options or {}
-  local bufnr = options.bufnr or api.nvim_get_current_buf()
+---@param opts? vim.lsp.buf.rename.Opts Additional options:
+function M.rename(new_name, opts)
+  opts = opts or {}
+  local bufnr = opts.bufnr or api.nvim_get_current_buf()
   local clients = vim.lsp.get_clients({
     bufnr = bufnr,
-    name = options.name,
+    name = opts.name,
     -- Clients must at least support rename, prepareRename is optional
     method = ms.textDocument_rename,
   })
-  if options.filter then
-    clients = vim.tbl_filter(options.filter, clients)
+  if opts.filter then
+    clients = vim.tbl_filter(opts.filter, clients)
   end
 
   if #clients == 0 then
@@ -415,21 +430,21 @@ end
 ---
 ---@param context (table|nil) Context for the request
 ---@see https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_references
----@param options? vim.lsp.ListOpts
-function M.references(context, options)
+---@param opts? vim.lsp.ListOpts
+function M.references(context, opts)
   validate({ context = { context, 't', true } })
   local params = util.make_position_params()
   params.context = context or {
     includeDeclaration = true,
   }
-  request_with_options(ms.textDocument_references, params, options)
+  request_with_opts(ms.textDocument_references, params, opts)
 end
 
 --- Lists all symbols in the current buffer in the quickfix window.
---- @param options? vim.lsp.ListOpts
-function M.document_symbol(options)
+--- @param opts? vim.lsp.ListOpts
+function M.document_symbol(opts)
   local params = { textDocument = util.make_text_document_params() }
-  request_with_options(ms.textDocument_documentSymbol, params, options)
+  request_with_opts(ms.textDocument_documentSymbol, params, opts)
 end
 
 --- @param call_hierarchy_items lsp.CallHierarchyItem[]?
@@ -504,7 +519,7 @@ function M.typehierarchy(kind)
 
   --- Merge results from multiple clients into a single table. Client-ID is preserved.
   ---
-  --- @param results table<integer, {error: lsp.ResponseError, result: lsp.TypeHierarchyItem[]?}>
+  --- @param results table<integer, {error: lsp.ResponseError?, result: lsp.TypeHierarchyItem[]?}>
   --- @return [integer, lsp.TypeHierarchyItem][]
   local function merge_results(results)
     local merged_results = {}
@@ -522,7 +537,7 @@ function M.typehierarchy(kind)
 
   local bufnr = api.nvim_get_current_buf()
   local params = util.make_position_params()
-  --- @param results table<integer, {error: lsp.ResponseError, result: lsp.TypeHierarchyItem[]?}>
+  --- @param results table<integer, {error: lsp.ResponseError?, result: lsp.TypeHierarchyItem[]?}>
   vim.lsp.buf_request_all(bufnr, ms.textDocument_prepareTypeHierarchy, params, function(results)
     local merged_results = merge_results(results)
     if #merged_results == 0 then
@@ -542,7 +557,7 @@ function M.typehierarchy(kind)
         )
       end
     else
-      local opts = {
+      local select_opts = {
         prompt = 'Select a type hierarchy item:',
         kind = 'typehierarchy',
         format_item = function(item)
@@ -553,7 +568,7 @@ function M.typehierarchy(kind)
         end,
       }
 
-      vim.ui.select(merged_results, opts, function(item)
+      vim.ui.select(merged_results, select_opts, function(item)
         local client = vim.lsp.get_client_by_id(item[1])
         if client then
           --- @type lsp.TypeHierarchyItem
@@ -626,14 +641,14 @@ end
 --- string means no filtering is done.
 ---
 --- @param query string? optional
---- @param options? vim.lsp.ListOpts
-function M.workspace_symbol(query, options)
+--- @param opts? vim.lsp.ListOpts
+function M.workspace_symbol(query, opts)
   query = query or npcall(vim.fn.input, 'Query: ')
   if query == nil then
     return
   end
   local params = { query = query }
-  request_with_options(ms.workspace_symbol, params, options)
+  request_with_opts(ms.workspace_symbol, params, opts)
 end
 
 --- Send request to the server to resolve document highlights for the current
@@ -825,19 +840,19 @@ end
 --- Selects a code action available at the current
 --- cursor position.
 ---
----@param options? vim.lsp.buf.code_action.Opts
+---@param opts? vim.lsp.buf.code_action.Opts
 ---@see https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_codeAction
 ---@see vim.lsp.protocol.CodeActionTriggerKind
-function M.code_action(options)
-  validate({ options = { options, 't', true } })
-  options = options or {}
+function M.code_action(opts)
+  validate({ options = { opts, 't', true } })
+  opts = opts or {}
   -- Detect old API call code_action(context) which should now be
   -- code_action({ context = context} )
   --- @diagnostic disable-next-line:undefined-field
-  if options.diagnostics or options.only then
-    options = { options = options }
+  if opts.diagnostics or opts.only then
+    opts = { options = opts }
   end
-  local context = options.context or {}
+  local context = opts.context or {}
   if not context.triggerKind then
     context.triggerKind = vim.lsp.protocol.CodeActionTriggerKind.Invoked
   end
@@ -867,17 +882,17 @@ function M.code_action(options)
     results[ctx.client_id] = { error = err, result = result, ctx = ctx }
     remaining = remaining - 1
     if remaining == 0 then
-      on_code_action_results(results, options)
+      on_code_action_results(results, opts)
     end
   end
 
   for _, client in ipairs(clients) do
     ---@type lsp.CodeActionParams
     local params
-    if options.range then
-      assert(type(options.range) == 'table', 'code_action range must be a table')
-      local start = assert(options.range.start, 'range must have a `start` property')
-      local end_ = assert(options.range['end'], 'range must have a `end` property')
+    if opts.range then
+      assert(type(opts.range) == 'table', 'code_action range must be a table')
+      local start = assert(opts.range.start, 'range must have a `start` property')
+      local end_ = assert(opts.range['end'], 'range must have a `end` property')
       params = util.make_given_range_params(start, end_, bufnr, client.offset_encoding)
     elseif mode == 'v' or mode == 'V' then
       local range = range_from_selection(bufnr, mode)

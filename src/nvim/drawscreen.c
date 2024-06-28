@@ -65,6 +65,7 @@
 #include "nvim/autocmd.h"
 #include "nvim/autocmd_defs.h"
 #include "nvim/buffer.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
 #include "nvim/cursor.h"
@@ -715,13 +716,16 @@ void end_search_hl(void)
   screen_search_hl.rm.regprog = NULL;
 }
 
-static void win_redr_bordertext(win_T *wp, VirtText vt, int col)
+static void win_redr_bordertext(win_T *wp, VirtText vt, int col, BorderTextType bt)
 {
   for (size_t i = 0; i < kv_size(vt);) {
-    int attr = 0;
+    int attr = -1;
     char *text = next_virt_text_chunk(vt, &i, &attr);
     if (text == NULL) {
       break;
+    }
+    if (attr == -1) {  // No highlight specified.
+      attr = wp->w_ns_hl_attr[bt == kBorderTextTitle ? HLF_BTITLE : HLF_BFOOTER];
     }
     attr = hl_apply_winblend(wp, attr);
     col += grid_line_puts(col, text, -1, attr);
@@ -773,7 +777,7 @@ static void win_redr_border(win_T *wp)
     if (wp->w_config.title) {
       int title_col = win_get_bordertext_col(icol, wp->w_config.title_width,
                                              wp->w_config.title_pos);
-      win_redr_bordertext(wp, wp->w_config.title_chunks, title_col);
+      win_redr_bordertext(wp, wp->w_config.title_chunks, title_col, kBorderTextTitle);
     }
     if (adj[1]) {
       grid_line_put_schar(icol + adj[3], chars[2], attrs[2]);
@@ -809,7 +813,7 @@ static void win_redr_border(win_T *wp)
     if (wp->w_config.footer) {
       int footer_col = win_get_bordertext_col(icol, wp->w_config.footer_width,
                                               wp->w_config.footer_pos);
-      win_redr_bordertext(wp, wp->w_config.footer_chunks, footer_col);
+      win_redr_bordertext(wp, wp->w_config.footer_chunks, footer_col, kBorderTextFooter);
     }
     if (adj[1]) {
       grid_line_put_schar(icol + adj[3], chars[4], attrs[4]);
@@ -821,25 +825,25 @@ static void win_redr_border(win_T *wp)
 /// Set cursor to its position in the current window.
 void setcursor(void)
 {
-  setcursor_mayforce(false);
+  setcursor_mayforce(curwin, false);
 }
 
 /// Set cursor to its position in the current window.
 /// @param force  when true, also when not redrawing.
-void setcursor_mayforce(bool force)
+void setcursor_mayforce(win_T *wp, bool force)
 {
   if (force || redrawing()) {
-    validate_cursor(curwin);
+    validate_cursor(wp);
 
-    ScreenGrid *grid = &curwin->w_grid;
-    int row = curwin->w_wrow;
-    int col = curwin->w_wcol;
-    if (curwin->w_p_rl) {
+    ScreenGrid *grid = &wp->w_grid;
+    int row = wp->w_wrow;
+    int col = wp->w_wcol;
+    if (wp->w_p_rl) {
       // With 'rightleft' set and the cursor on a double-wide character,
       // position it on the leftmost column.
-      col = curwin->w_width_inner - curwin->w_wcol
-            - ((utf_ptr2cells(get_cursor_pos_ptr()) == 2
-                && vim_isprintc(gchar_cursor())) ? 2 : 1);
+      char *cursor = ml_get_buf(wp->w_buffer, wp->w_cursor.lnum) + wp->w_cursor.col;
+      col = wp->w_width_inner - wp->w_wcol - ((utf_ptr2cells(cursor) == 2
+                                               && vim_isprintc(utf_ptr2char(cursor))) ? 2 : 1);
     }
 
     grid_adjust(&grid, &row, &col);
@@ -927,7 +931,7 @@ int showmode(void)
     msg_ext_clear(true);
   }
 
-  // don't make non-flushed message part of the showmode
+  // Don't make non-flushed message part of the showmode.
   msg_ext_ui_flush();
 
   msg_grid_validate();
@@ -1542,6 +1546,7 @@ static void win_update(win_T *wp)
   // Force redraw when width of 'number' or 'relativenumber' column changes.
   if (wp->w_nrwidth != nrwidth_new) {
     type = UPD_NOT_VALID;
+    changed_line_abv_curs_win(wp);
     wp->w_nrwidth = nrwidth_new;
   } else {
     // Set mod_top to the first line that needs displaying because of
@@ -1588,6 +1593,18 @@ static void win_update(win_T *wp)
         }
       }
     }
+
+    if (search_hl_has_cursor_lnum > 0) {
+      // CurSearch was used last time, need to redraw the line with it to
+      // avoid having two matches highlighted with CurSearch.
+      if (mod_top == 0 || mod_top > search_hl_has_cursor_lnum) {
+        mod_top = search_hl_has_cursor_lnum;
+      }
+      if (mod_bot == 0 || mod_bot < search_hl_has_cursor_lnum + 1) {
+        mod_bot = search_hl_has_cursor_lnum + 1;
+      }
+    }
+
     if (mod_top != 0 && hasAnyFolding(wp)) {
       // A change in a line can cause lines above it to become folded or
       // unfolded.  Find the top most buffer line that may be affected.
@@ -1646,6 +1663,7 @@ static void win_update(win_T *wp)
 
   wp->w_redraw_top = 0;  // reset for next time
   wp->w_redraw_bot = 0;
+  search_hl_has_cursor_lnum = 0;
 
   // When only displaying the lines at the top, set top_end.  Used when
   // window has scrolled down for msg_scrolled.
@@ -1703,7 +1721,7 @@ static void win_update(win_T *wp)
         j = wp->w_lines[0].wl_lnum - wp->w_topline;
       }
       if (j < wp->w_grid.rows - 2) {               // not too far off
-        int i = plines_m_win(wp, wp->w_topline, wp->w_lines[0].wl_lnum - 1, true);
+        int i = plines_m_win(wp, wp->w_topline, wp->w_lines[0].wl_lnum - 1, wp->w_height_inner);
         // insert extra lines for previously invisible filler lines
         if (wp->w_lines[0].wl_lnum != wp->w_topline) {
           i += win_get_fill(wp, wp->w_lines[0].wl_lnum) - wp->w_old_topfill;
@@ -2711,7 +2729,7 @@ void redraw_buf_line_later(buf_T *buf, linenr_T line, bool force)
   }
 }
 
-void redraw_buf_range_later(buf_T *buf,  linenr_T firstline, linenr_T lastline)
+void redraw_buf_range_later(buf_T *buf, linenr_T firstline, linenr_T lastline)
 {
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
     if (wp->w_buffer == buf

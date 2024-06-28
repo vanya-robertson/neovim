@@ -19,6 +19,7 @@
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
 #include "nvim/cmdexpand_defs.h"
+#include "nvim/errors.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/typval_defs.h"
@@ -1812,8 +1813,7 @@ int makemap(FILE *fd, buf_T *buf)
           iemsg(_("E228: makemap: Illegal mode"));
           return FAIL;
         }
-        do {
-          // do this twice if c2 is set, 3 times with c3 */
+        do {  // do this twice if c2 is set, 3 times with c3
           // When outputting <> form, need to make sure that 'cpo'
           // is set to the Vim default.
           if (!did_cpo) {

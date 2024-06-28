@@ -18,6 +18,7 @@
 #include "nvim/decoration_provider.h"
 #include "nvim/drawscreen.h"
 #include "nvim/extmark.h"
+#include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/highlight_group.h"
 #include "nvim/map_defs.h"
@@ -41,6 +42,7 @@ void api_extmark_free_all_mem(void)
     xfree(name.data);
   })
   map_destroy(String, &namespace_ids);
+  set_destroy(uint32_t, &namespace_localscope);
 }
 
 /// Creates a new namespace or gets an existing one. [namespace]()
@@ -121,7 +123,7 @@ Array virt_text_to_array(VirtText vt, bool hl_name, Arena *arena)
     Array hl_array = arena_array(arena, i < j ? j - i + 1 : 0);
     for (; i < j; i++) {
       int hl_id = kv_A(vt, i).hl_id;
-      if (hl_id > 0) {
+      if (hl_id >= 0) {
         ADD_C(hl_array, hl_group_name(hl_id, hl_name));
       }
     }
@@ -131,11 +133,11 @@ Array virt_text_to_array(VirtText vt, bool hl_name, Arena *arena)
     Array chunk = arena_array(arena, 2);
     ADD_C(chunk, CSTR_AS_OBJ(text));
     if (hl_array.size > 0) {
-      if (hl_id > 0) {
+      if (hl_id >= 0) {
         ADD_C(hl_array, hl_group_name(hl_id, hl_name));
       }
       ADD_C(chunk, ARRAY_OBJ(hl_array));
-    } else if (hl_id > 0) {
+    } else if (hl_id >= 0) {
       ADD_C(chunk, hl_group_name(hl_id, hl_name));
     }
     ADD_C(chunks, ARRAY_OBJ(chunk));
@@ -177,10 +179,6 @@ static Array extmark_to_array(MTPair extmark, bool id, bool add_dict, bool hl_na
     }
     if (mt_invalid(start)) {
       PUT_C(dict, "invalid", BOOLEAN_OBJ(true));
-    }
-
-    if (mt_scoped(start)) {
-      PUT_C(dict, "scoped", BOOLEAN_OBJ(true));
     }
 
     decor_to_dict_legacy(&dict, mt_decor(start), hl_name, arena);
@@ -489,8 +487,6 @@ Array nvim_buf_get_extmarks(Buffer buffer, Integer ns_id, Object start, Object e
 ///                   used together with virt_text.
 ///               - url: A URL to associate with this extmark. In the TUI, the OSC 8 control
 ///                   sequence is used to generate a clickable hyperlink to this URL.
-///               - scoped: boolean that indicates that the extmark should only be
-///                   displayed in the namespace scope. (experimental)
 ///
 /// @param[out]  err   Error details, if any
 /// @return Id of the created/updated extmark
@@ -749,11 +745,6 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
   }
 
   if (opts->ephemeral && decor_state.win && decor_state.win->w_buffer == buf) {
-    if (opts->scoped) {
-      api_set_error(err, kErrorTypeException, "not yet implemented");
-      goto error;
-    }
-
     int r = (int)line;
     int c = (int)col;
     if (line2 == -1) {
@@ -761,32 +752,20 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
       col2 = c;
     }
 
-    DecorPriority subpriority = DECOR_PRIORITY_BASE;
-    if (HAS_KEY(opts, set_extmark, _subpriority)) {
-      VALIDATE_RANGE((opts->_subpriority >= 0 && opts->_subpriority <= UINT16_MAX),
-                     "_subpriority", {
-        goto error;
-      });
-      subpriority = (DecorPriority)opts->_subpriority;
-    }
-
     if (kv_size(virt_text.data.virt_text)) {
-      decor_range_add_virt(&decor_state, r, c, line2, col2, decor_put_vt(virt_text, NULL), true,
-                           subpriority);
+      decor_range_add_virt(&decor_state, r, c, line2, col2, decor_put_vt(virt_text, NULL), true);
     }
     if (kv_size(virt_lines.data.virt_lines)) {
-      decor_range_add_virt(&decor_state, r, c, line2, col2, decor_put_vt(virt_lines, NULL), true,
-                           subpriority);
+      decor_range_add_virt(&decor_state, r, c, line2, col2, decor_put_vt(virt_lines, NULL), true);
     }
     if (url != NULL) {
       DecorSignHighlight sh = DECOR_SIGN_HIGHLIGHT_INIT;
       sh.url = url;
-      decor_range_add_sh(&decor_state, r, c, line2, col2, &sh, true, 0, 0, subpriority);
+      decor_range_add_sh(&decor_state, r, c, line2, col2, &sh, true, 0, 0);
     }
     if (has_hl) {
       DecorSignHighlight sh = decor_sh_from_inline(hl);
-      decor_range_add_sh(&decor_state, r, c, line2, col2, &sh, true, (uint32_t)ns_id, id,
-                         subpriority);
+      decor_range_add_sh(&decor_state, r, c, line2, col2, &sh, true, (uint32_t)ns_id, id);
     }
   } else {
     if (opts->ephemeral) {
@@ -846,7 +825,7 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
     extmark_set(buf, (uint32_t)ns_id, &id, (int)line, (colnr_T)col, line2, col2,
                 decor, decor_flags, right_gravity, opts->end_right_gravity,
                 !GET_BOOL_OR_TRUE(opts, set_extmark, undo_restore),
-                opts->invalidate, opts->scoped, err);
+                opts->invalidate, err);
     if (ERROR_SET(err)) {
       decor_free(decor);
       return 0;
@@ -972,7 +951,7 @@ Integer nvim_buf_add_highlight(Buffer buffer, Integer ns_id, String hl_group, In
   decor.data.hl.hl_id = hl_id;
 
   extmark_set(buf, ns, NULL, (int)line, (colnr_T)col_start, end_line, (colnr_T)col_end,
-              decor, MT_FLAG_DECOR_HL, true, false, false, false, false, NULL);
+              decor, MT_FLAG_DECOR_HL, true, false, false, false, NULL);
   return ns_id;
 }
 
@@ -1023,7 +1002,7 @@ void nvim_buf_clear_namespace(Buffer buffer, Integer ns_id, Integer line_start, 
 /// Note: this function should not be called often. Rather, the callbacks
 /// themselves can be used to throttle unneeded callbacks. the `on_start`
 /// callback can return `false` to disable the provider until the next redraw.
-/// Similarly, return `false` in `on_win` will skip the `on_lines` calls
+/// Similarly, return `false` in `on_win` will skip the `on_line` calls
 /// for that window (but any extmarks set in `on_win` will still be used).
 /// A plugin managing multiple sources of decoration should ideally only set
 /// one provider, and merge the sources internally. You can use multiple `ns_id`
@@ -1032,10 +1011,10 @@ void nvim_buf_clear_namespace(Buffer buffer, Integer ns_id, Integer line_start, 
 /// Note: doing anything other than setting extmarks is considered experimental.
 /// Doing things like changing options are not explicitly forbidden, but is
 /// likely to have unexpected consequences (such as 100% CPU consumption).
-/// doing `vim.rpcnotify` should be OK, but `vim.rpcrequest` is quite dubious
+/// Doing `vim.rpcnotify` should be OK, but `vim.rpcrequest` is quite dubious
 /// for the moment.
 ///
-/// Note: It is not allowed to remove or update extmarks in 'on_line' callbacks.
+/// Note: It is not allowed to remove or update extmarks in `on_line` callbacks.
 ///
 /// @param ns_id  Namespace id from |nvim_create_namespace()|
 /// @param opts  Table of callbacks:
@@ -1050,7 +1029,7 @@ void nvim_buf_clear_namespace(Buffer buffer, Integer ns_id, Integer line_start, 
 ///               ```
 ///             - on_win: called when starting to redraw a specific window.
 ///               ```
-///                 ["win", winid, bufnr, topline, botline]
+///                 ["win", winid, bufnr, toprow, botrow]
 ///               ```
 ///             - on_line: called for each buffer line being redrawn.
 ///                 (The interaction with fold lines is subject to change)
@@ -1177,7 +1156,7 @@ VirtText parse_virt_text(Array chunks, Error *err, int *width)
 
     String str = chunk.items[0].data.string;
 
-    int hl_id = 0;
+    int hl_id = -1;
     if (chunk.size == 2) {
       Object hl = chunk.items[1];
       if (hl.type == kObjectTypeArray) {
@@ -1227,71 +1206,121 @@ String nvim__buf_debug_extmarks(Buffer buffer, Boolean keys, Boolean dot, Error 
   return mt_inspect(buf->b_marktree, keys, dot);
 }
 
-/// Adds the namespace scope to the window.
+/// EXPERIMENTAL: this API will change in the future.
 ///
-/// @param window Window handle, or 0 for current window
-/// @param ns_id the namespace to add
-/// @return true if the namespace was added, else false
-Boolean nvim_win_add_ns(Window window, Integer ns_id, Error *err)
-  FUNC_API_SINCE(12)
+/// Set some properties for namespace
+///
+/// @param ns_id Namespace
+/// @param opts Optional parameters to set:
+///           - wins: a list of windows to be scoped in
+///
+void nvim__ns_set(Integer ns_id, Dict(ns_opts) *opts, Error *err)
 {
-  win_T *win = find_window_by_handle(window, err);
-  if (!win) {
-    return false;
+  VALIDATE_INT(ns_initialized((uint32_t)ns_id), "ns_id", ns_id, {
+    return;
+  });
+
+  bool set_scoped = true;
+
+  if (HAS_KEY(opts, ns_opts, wins)) {
+    if (opts->wins.size == 0) {
+      set_scoped = false;
+    }
+
+    Set(ptr_t) windows = SET_INIT;
+    for (size_t i = 0; i < opts->wins.size; i++) {
+      Integer win = opts->wins.items[i].data.integer;
+
+      win_T *wp = find_window_by_handle((Window)win, err);
+      if (!wp) {
+        return;
+      }
+
+      set_put(ptr_t, &windows, wp);
+    }
+
+    FOR_ALL_TAB_WINDOWS(tp, wp) {
+      if (set_has(ptr_t, &windows, wp) && !set_has(uint32_t, &wp->w_ns_set, (uint32_t)ns_id)) {
+        set_put(uint32_t, &wp->w_ns_set, (uint32_t)ns_id);
+
+        if (map_has(uint32_t, wp->w_buffer->b_extmark_ns, (uint32_t)ns_id)) {
+          changed_window_setting(wp);
+        }
+      }
+
+      if (set_has(uint32_t, &wp->w_ns_set, (uint32_t)ns_id) && !set_has(ptr_t, &windows, wp)) {
+        set_del(uint32_t, &wp->w_ns_set, (uint32_t)ns_id);
+
+        if (map_has(uint32_t, wp->w_buffer->b_extmark_ns, (uint32_t)ns_id)) {
+          changed_window_setting(wp);
+        }
+      }
+    }
+
+    set_destroy(ptr_t, &windows);
   }
+
+  if (set_scoped && !set_has(uint32_t, &namespace_localscope, (uint32_t)ns_id)) {
+    set_put(uint32_t, &namespace_localscope, (uint32_t)ns_id);
+
+    // When a namespace becomes scoped, any window which contains
+    // elements associated with namespace needs to be redrawn
+    FOR_ALL_TAB_WINDOWS(tp, wp) {
+      if (map_has(uint32_t, wp->w_buffer->b_extmark_ns, (uint32_t)ns_id)) {
+        changed_window_setting(wp);
+      }
+    }
+  } else if (!set_scoped && set_has(uint32_t, &namespace_localscope, (uint32_t)ns_id)) {
+    set_del(uint32_t, &namespace_localscope, (uint32_t)ns_id);
+
+    // When a namespace becomes unscoped, any window which does not
+    // contain elements associated with namespace needs to be redrawn
+    FOR_ALL_TAB_WINDOWS(tp, wp) {
+      if (map_has(uint32_t, wp->w_buffer->b_extmark_ns, (uint32_t)ns_id)) {
+        changed_window_setting(wp);
+      }
+    }
+  }
+}
+
+/// EXPERIMENTAL: this API will change in the future.
+///
+/// Get the properties for namespace
+///
+/// @param ns_id Namespace
+/// @return  Map defining the namespace properties, see |nvim__ns_set()|
+Dict(ns_opts) nvim__ns_get(Integer ns_id, Arena *arena, Error *err)
+{
+  Dict(ns_opts) opts = KEYDICT_INIT;
+
+  Array windows = ARRAY_DICT_INIT;
+
+  PUT_KEY(opts, ns_opts, wins, windows);
 
   VALIDATE_INT(ns_initialized((uint32_t)ns_id), "ns_id", ns_id, {
-    return false;
+    return opts;
   });
 
-  set_put(uint32_t, &win->w_ns_set, (uint32_t)ns_id);
-
-  changed_window_setting(win);
-
-  return true;
-}
-
-/// Gets all the namespaces scopes associated with a window.
-///
-/// @param window Window handle, or 0 for current window
-/// @return a list of namespaces ids
-ArrayOf(Integer) nvim_win_get_ns(Window window, Arena *arena, Error *err)
-  FUNC_API_SINCE(12)
-{
-  win_T *win = find_window_by_handle(window, err);
-  if (!win) {
-    return (Array)ARRAY_DICT_INIT;
+  if (!set_has(uint32_t, &namespace_localscope, (uint32_t)ns_id)) {
+    return opts;
   }
 
-  Array rv = arena_array(arena, set_size(&win->w_ns_set));
-  uint32_t i;
-  set_foreach(&win->w_ns_set, i, {
-    ADD_C(rv, INTEGER_OBJ((Integer)(i)));
-  });
-
-  return rv;
-}
-
-/// Removes the namespace scope from the window.
-///
-/// @param window Window handle, or 0 for current window
-/// @param ns_id the namespace to remove
-/// @return true if the namespace was removed, else false
-Boolean nvim_win_remove_ns(Window window, Integer ns_id, Error *err)
-  FUNC_API_SINCE(12)
-{
-  win_T *win = find_window_by_handle(window, err);
-  if (!win) {
-    return false;
+  size_t count = 0;
+  FOR_ALL_TAB_WINDOWS(tp, wp) {
+    if (set_has(uint32_t, &wp->w_ns_set, (uint32_t)ns_id)) {
+      count++;
+    }
   }
 
-  if (!set_has(uint32_t, &win->w_ns_set, (uint32_t)ns_id)) {
-    return false;
+  windows = arena_array(arena, count);
+
+  FOR_ALL_TAB_WINDOWS(tp, wp) {
+    if (set_has(uint32_t, &wp->w_ns_set, (uint32_t)ns_id)) {
+      ADD(windows, INTEGER_OBJ(wp->handle));
+    }
   }
 
-  set_del(uint32_t, &win->w_ns_set, (uint32_t)ns_id);
+  PUT_KEY(opts, ns_opts, wins, windows);
 
-  changed_window_setting(win);
-
-  return true;
+  return opts;
 }

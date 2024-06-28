@@ -170,7 +170,7 @@ Integer nvim_buf_set_virtual_text(Buffer buffer, Integer src_id, Integer line, A
   DecorInline decor = { .ext = true, .data.ext.vt = vt, .data.ext.sh_idx = DECOR_ID_INVALID };
 
   extmark_set(buf, ns_id, NULL, (int)line, 0, -1, -1, decor, 0, true,
-              false, false, false, false, NULL);
+              false, false, false, NULL);
   return src_id;
 }
 
@@ -785,4 +785,24 @@ Array nvim_call_atomic(uint64_t channel_id, Array calls, Arena *arena, Error *er
 theend:
   api_clear_error(&nested_error);
   return rv;
+}
+
+/// @deprecated
+///
+/// @param channel_id Channel id (passed automatically by the dispatcher)
+/// @param event      Event type string
+void nvim_subscribe(uint64_t channel_id, String event)
+  FUNC_API_SINCE(1) FUNC_API_REMOTE_ONLY
+{
+  // Does nothing. `rpcnotify(0,…)` broadcasts to all channels, there are no "subscriptions".
+}
+
+/// @deprecated
+///
+/// @param channel_id Channel id (passed automatically by the dispatcher)
+/// @param event      Event type string
+void nvim_unsubscribe(uint64_t channel_id, String event)
+  FUNC_API_SINCE(1) FUNC_API_REMOTE_ONLY
+{
+  // Does nothing. `rpcnotify(0,…)` broadcasts to all channels, there are no "subscriptions".
 }
