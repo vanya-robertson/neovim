@@ -997,7 +997,7 @@ function vim.is_callable(f)
   if m == nil then
     return false
   end
-  return type(m.__call) == 'function'
+  return type(rawget(m, '__call')) == 'function'
 end
 
 --- Creates a table whose missing keys are provided by {createfn} (like Python's "defaultdict").
@@ -1218,6 +1218,8 @@ end
 ---   only moving context save and restore to lower level might resolve this.
 ---
 --- @param context vim.context.mods
+--- @param f function
+--- @return any
 function vim._with(context, f)
   vim.validate('context', context, 'table')
   vim.validate('f', f, 'function')

@@ -953,7 +953,7 @@ static varnumber_T count_list(list_T *l, typval_T *needle, int64_t idx, bool ic)
   varnumber_T n = 0;
 
   for (; li != NULL; li = TV_LIST_ITEM_NEXT(l, li)) {
-    if (tv_equal(TV_LIST_ITEM_TV(li), needle, ic, false)) {
+    if (tv_equal(TV_LIST_ITEM_TV(li), needle, ic)) {
       n++;
     }
   }
@@ -973,7 +973,7 @@ static varnumber_T count_dict(dict_T *d, typval_T *needle, bool ic)
   varnumber_T n = 0;
 
   TV_DICT_ITER(d, di, {
-    if (tv_equal(&di->di_tv, needle, ic, false)) {
+    if (tv_equal(&di->di_tv, needle, ic)) {
       n++;
     }
   });
@@ -2372,6 +2372,33 @@ static void f_get(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
         for (int i = 0; i < pt->pt_argc; i++) {
           tv_list_append_tv(rettv->vval.v_list, &pt->pt_argv[i]);
         }
+      } else if (strcmp(what, "arity") == 0) {
+        int required = 0;
+        int optional = 0;
+        bool varargs = false;
+        const char *name = partial_name(pt);
+
+        get_func_arity(name, &required, &optional, &varargs);
+
+        rettv->v_type = VAR_DICT;
+        tv_dict_alloc_ret(rettv);
+        dict_T *dict = rettv->vval.v_dict;
+
+        // Take into account the arguments of the partial, if any.
+        // Note that it is possible to supply more arguments than the function
+        // accepts.
+        if (pt->pt_argc >= required + optional) {
+          required = optional = 0;
+        } else if (pt->pt_argc > required) {
+          optional -= pt->pt_argc - required;
+          required = 0;
+        } else {
+          required -= pt->pt_argc;
+        }
+
+        tv_dict_add_nr(dict, S_LEN("required"), required);
+        tv_dict_add_nr(dict, S_LEN("optional"), optional);
+        tv_dict_add_bool(dict, S_LEN("varargs"), varargs);
       } else {
         semsg(_(e_invarg2), what);
       }
@@ -3770,7 +3797,7 @@ static void f_index(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
       typval_T tv;
       tv.v_type = VAR_NUMBER;
       tv.vval.v_number = tv_blob_get(b, idx);
-      if (tv_equal(&tv, &argvars[1], ic, false)) {
+      if (tv_equal(&tv, &argvars[1], ic)) {
         rettv->vval.v_number = idx;
         return;
       }
@@ -3807,7 +3834,7 @@ static void f_index(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   }
 
   for (; item != NULL; item = TV_LIST_ITEM_NEXT(l, item), idx++) {
-    if (tv_equal(TV_LIST_ITEM_TV(item), &argvars[1], ic, false)) {
+    if (tv_equal(TV_LIST_ITEM_TV(item), &argvars[1], ic)) {
       rettv->vval.v_number = idx;
       break;
     }
@@ -5883,42 +5910,20 @@ static void f_py3eval(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 static void init_srand(uint32_t *const x)
   FUNC_ATTR_NONNULL_ALL
 {
-#ifndef MSWIN
-  static int dev_urandom_state = NOTDONE;  // FAIL or OK once tried
+  union {
+    uint32_t number;
+    uint8_t bytes[sizeof(uint32_t)];
+  } buf;
 
-  if (dev_urandom_state != FAIL) {
-    const int fd = os_open("/dev/urandom", O_RDONLY, 0);
-    struct {
-      union {
-        uint32_t number;
-        char bytes[sizeof(uint32_t)];
-      } contents;
-    } buf;
+  if (uv_random(NULL, NULL, buf.bytes, sizeof(buf.bytes), 0, NULL) == 0) {
+    *x = buf.number;
+    return;
+  }
 
-    // Attempt reading /dev/urandom.
-    if (fd == -1) {
-      dev_urandom_state = FAIL;
-    } else {
-      buf.contents.number = 0;
-      if (read(fd, buf.contents.bytes, sizeof(uint32_t)) != sizeof(uint32_t)) {
-        dev_urandom_state = FAIL;
-      } else {
-        dev_urandom_state = OK;
-        *x = buf.contents.number;
-      }
-      os_close(fd);
-    }
-  }
-  if (dev_urandom_state != OK) {
-    // Reading /dev/urandom doesn't work, fall back to os_hrtime() XOR with process ID
-#endif
-  // uncrustify:off
-    *x = (uint32_t)os_hrtime();
-    *x ^= (uint32_t)os_get_pid();
-#ifndef MSWIN
-  }
-#endif
-  // uncrustify:on
+  // The system's random number generator doesn't work,
+  // fall back to os_hrtime() XOR with process ID
+  *x = (uint32_t)os_hrtime();
+  *x ^= (uint32_t)os_get_pid();
 }
 
 static inline uint32_t splitmix32(uint32_t *const x)

@@ -105,6 +105,7 @@ static bool cmdline_fuzzy_completion_supported(const expand_T *const xp)
          && xp->xp_context != EXPAND_COLORS
          && xp->xp_context != EXPAND_COMPILER
          && xp->xp_context != EXPAND_DIRECTORIES
+         && xp->xp_context != EXPAND_DIRS_IN_CDPATH
          && xp->xp_context != EXPAND_FILES
          && xp->xp_context != EXPAND_FILES_IN_PATH
          && xp->xp_context != EXPAND_FILETYPE
@@ -159,7 +160,8 @@ static void wildescape(expand_T *xp, const char *str, int numfiles, char **files
       || xp->xp_context == EXPAND_FILES_IN_PATH
       || xp->xp_context == EXPAND_SHELLCMD
       || xp->xp_context == EXPAND_BUFFERS
-      || xp->xp_context == EXPAND_DIRECTORIES) {
+      || xp->xp_context == EXPAND_DIRECTORIES
+      || xp->xp_context == EXPAND_DIRS_IN_CDPATH) {
     // Insert a backslash into a file name before a space, \, %, #
     // and wildmatch characters, except '~'.
     for (int i = 0; i < numfiles; i++) {
@@ -241,7 +243,7 @@ int nextwild(expand_T *xp, int type, int options, bool escape)
   if (xp->xp_numfiles == -1) {
     set_expand_context(xp);
     if (xp->xp_context == EXPAND_LUA) {
-      nlua_expand_pat(xp, xp->xp_pattern);
+      nlua_expand_pat(xp);
     }
     cmd_showtail = expand_showtail(xp);
   }
@@ -289,7 +291,6 @@ int nextwild(expand_T *xp, int type, int options, bool escape)
     p2 = ExpandOne(xp, p1, xstrnsave(&ccline->cmdbuff[i], xp->xp_pattern_len),
                    use_options, type);
     xfree(p1);
-
     // Longest match: make sure it is not shorter, happens with :help.
     if (p2 != NULL && type == WILD_LONGEST) {
       int j;
@@ -1060,7 +1061,7 @@ int showmatches(expand_T *xp, bool wildmenu)
   if (xp->xp_numfiles == -1) {
     set_expand_context(xp);
     if (xp->xp_context == EXPAND_LUA) {
-      nlua_expand_pat(xp, xp->xp_pattern);
+      nlua_expand_pat(xp);
     }
     int i = expand_cmdline(xp, ccline->cmdbuff, ccline->cmdpos,
                            &numMatches, &matches);
@@ -1229,7 +1230,8 @@ char *addstar(char *fname, size_t len, int context)
   if (context != EXPAND_FILES
       && context != EXPAND_FILES_IN_PATH
       && context != EXPAND_SHELLCMD
-      && context != EXPAND_DIRECTORIES) {
+      && context != EXPAND_DIRECTORIES
+      && context != EXPAND_DIRS_IN_CDPATH) {
     // Matching will be done internally (on something other than files).
     // So we convert the file-matching-type wildcards into our kind for
     // use with vim_regcomp().  First work out how long it will be:
@@ -1843,7 +1845,7 @@ static const char *set_context_by_cmdname(const char *cmd, cmdidx_T cmdidx, expa
   case CMD_tcd:
   case CMD_tchdir:
     if (xp->xp_context == EXPAND_FILES) {
-      xp->xp_context = EXPAND_DIRECTORIES;
+      xp->xp_context = EXPAND_DIRS_IN_CDPATH;
     }
     break;
   case CMD_help:
@@ -2507,6 +2509,8 @@ static int expand_files_and_dirs(expand_T *xp, char *pat, char ***matches, int *
     flags |= EW_FILE;
   } else if (xp->xp_context == EXPAND_FILES_IN_PATH) {
     flags |= (EW_FILE | EW_PATH);
+  } else if (xp->xp_context == EXPAND_DIRS_IN_CDPATH) {
+    flags = (flags | EW_DIR | EW_CDPATH) & ~EW_FILE;
   } else {
     flags = (flags | EW_DIR) & ~EW_FILE;
   }
@@ -2719,7 +2723,8 @@ static int ExpandFromContext(expand_T *xp, char *pat, char ***matches, int *numM
 
   if (xp->xp_context == EXPAND_FILES
       || xp->xp_context == EXPAND_DIRECTORIES
-      || xp->xp_context == EXPAND_FILES_IN_PATH) {
+      || xp->xp_context == EXPAND_FILES_IN_PATH
+      || xp->xp_context == EXPAND_DIRS_IN_CDPATH) {
     return expand_files_and_dirs(xp, pat, matches, numMatches, flags, options);
   }
 
@@ -3611,7 +3616,8 @@ void f_getcompletion(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
 theend:
   if (xpc.xp_context == EXPAND_LUA) {
-    nlua_expand_pat(&xpc, xpc.xp_pattern);
+    xpc.xp_col = (int)strlen(xpc.xp_line);
+    nlua_expand_pat(&xpc);
     xpc.xp_pattern_len = strlen(xpc.xp_pattern);
   }
   char *pat;

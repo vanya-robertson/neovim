@@ -371,7 +371,7 @@ describe('LSP', function()
               true,
               exec_lua [[
               local keymap
-              vim.api.nvim_buf_call(BUFFER, function()
+              vim._with({buf = BUFFER}, function()
                 keymap = vim.fn.maparg("K", "n", false, true)
               end)
               return keymap.callback == vim.lsp.buf.hover
@@ -388,7 +388,7 @@ describe('LSP', function()
             '',
             exec_lua [[
             local keymap
-            vim.api.nvim_buf_call(BUFFER, function()
+            vim._with({buf = BUFFER}, function()
               keymap = vim.fn.maparg("K", "n", false, false)
             end)
             return keymap
@@ -782,7 +782,7 @@ describe('LSP', function()
               vim.api.nvim_buf_set_name(BUFFER, oldname)
               vim.api.nvim_buf_set_lines(BUFFER, 0, -1, true, {"help me"})
               lsp.buf_attach_client(BUFFER, TEST_RPC_CLIENT_ID)
-              vim.api.nvim_buf_call(BUFFER, function() vim.cmd('saveas ' .. newname) end)
+              vim._with({buf = BUFFER}, function() vim.cmd('saveas ' .. newname) end)
             ]=],
               tmpfile_old,
               tmpfile_new
@@ -5128,12 +5128,12 @@ describe('LSP', function()
       it(
         string.format('sends notifications when files change (watchfunc=%s)', watchfunc),
         function()
-          if watchfunc == 'fswatch' then
+          if watchfunc == 'inotify' then
             skip(is_os('win'), 'not supported on windows')
             skip(is_os('mac'), 'flaky test on mac')
             skip(
-              not is_ci() and fn.executable('fswatch') == 0,
-              'fswatch not installed and not on CI'
+              not is_ci() and fn.executable('inotifywait') == 0,
+              'inotify-tools not installed and not on CI'
             )
           end
 
@@ -5265,7 +5265,7 @@ describe('LSP', function()
 
     test_filechanges('watch')
     test_filechanges('watchdirs')
-    test_filechanges('fswatch')
+    test_filechanges('inotify')
 
     it('correctly registers and unregisters', function()
       local root_dir = '/some_dir'

@@ -450,7 +450,7 @@ local function modula2(bufnr)
 
   return 'modula2',
     function(b)
-      vim.api.nvim_buf_call(b, function()
+      vim._with({ buf = b }, function()
         fn['modula2#SetDialect'](dialect, extension)
       end)
     end
@@ -711,8 +711,22 @@ end
 
 --- @type vim.filetype.mapfn
 function M.html(_, bufnr)
+  -- Disabled for the reasons mentioned here:
+  -- https://github.com/vim/vim/pull/13594#issuecomment-1834465890
+  -- local filename = fn.fnamemodify(path, ':t')
+  -- if filename:find('%.component%.html$') then
+  --   return 'htmlangular'
+  -- end
+
   for _, line in ipairs(getlines(bufnr, 1, 40)) do
-    if matchregex(line, [[\<DTD\s\+XHTML\s]]) then
+    if
+      matchregex(
+        line,
+        [[@\(if\|for\|defer\|switch\)\|\*\(ngIf\|ngFor\|ngSwitch\|ngTemplateOutlet\)\|ng-template\|ng-content\|{{.*}}]]
+      )
+    then
+      return 'htmlangular'
+    elseif matchregex(line, [[\<DTD\s\+XHTML\s]]) then
       return 'xhtml'
     elseif
       matchregex(
@@ -1102,6 +1116,8 @@ function M.perl(path, bufnr)
   end
 end
 
+local prolog_patterns = { '^%s*:%-', '^%s*%%+%s', '^%s*%%+$', '^%s*/%*', '%.%s*$' }
+
 --- @type vim.filetype.mapfn
 function M.pl(_, bufnr)
   if vim.g.filetype_pl then
@@ -1110,11 +1126,7 @@ function M.pl(_, bufnr)
   -- Recognize Prolog by specific text in the first non-empty line;
   -- require a blank after the '%' because Perl uses "%list" and "%translate"
   local line = nextnonblank(bufnr, 1)
-  if
-    line and line:find(':%-')
-    or matchregex(line, [[\c\<prolog\>]])
-    or findany(line, { '^%s*%%+%s', '^%s*%%+$', '^%s*/%*' })
-  then
+  if line and matchregex(line, [[\c\<prolog\>]]) or findany(line, prolog_patterns) then
     return 'prolog'
   else
     return 'perl'
@@ -1218,11 +1230,7 @@ function M.proto(_, bufnr)
   -- Recognize Prolog by specific text in the first non-empty line;
   -- require a blank after the '%' because Perl uses "%list" and "%translate"
   local line = nextnonblank(bufnr, 1)
-  if
-    line and line:find(':%-')
-    or matchregex(line, [[\c\<prolog\>]])
-    or findany(line, { '^%s*%%+%s', '^%s*%%+$', '^%s*/%*' })
-  then
+  if line and matchregex(line, [[\c\<prolog\>]]) or findany(line, prolog_patterns) then
     return 'prolog'
   end
 end
@@ -1597,7 +1605,7 @@ function M.tex(path, bufnr)
   end
 end
 
--- Determine if a *.tf file is TF mud client or terraform
+-- Determine if a *.tf file is TF (TinyFugue) mud client or terraform
 --- @type vim.filetype.mapfn
 function M.tf(_, bufnr)
   for _, line in ipairs(getlines(bufnr)) do

@@ -139,11 +139,14 @@ function TSHighlighter.new(tree, opts)
   -- but use synload.vim rather than syntax.vim to not enable
   -- syntax FileType autocmds. Later on we should integrate with the
   -- `:syntax` and `set syntax=...` machinery properly.
+  -- Still need to ensure that syntaxset augroup exists, so that calling :destroy()
+  -- immediately afterwards will not error.
   if vim.g.syntax_on ~= 1 then
     vim.cmd.runtime({ 'syntax/synload.vim', bang = true })
+    vim.api.nvim_create_augroup('syntaxset', { clear = false })
   end
 
-  api.nvim_buf_call(self.bufnr, function()
+  vim._with({ buf = self.bufnr }, function()
     vim.opt_local.spelloptions:append('noplainbuffer')
   end)
 
