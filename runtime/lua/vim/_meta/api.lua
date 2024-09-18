@@ -378,7 +378,7 @@ function vim.api.nvim_buf_get_commands(buffer, opts) end
 ---             • details: Whether to include the details dict
 ---             • hl_name: Whether to include highlight group name instead of
 ---               id, true if omitted
---- @return vim.api.keyset.get_extmark_item
+--- @return vim.api.keyset.get_extmark_item_by_id
 function vim.api.nvim_buf_get_extmark_by_id(buffer, ns_id, id, opts) end
 
 --- Gets `extmarks` in "traversal order" from a `charwise` region defined by
@@ -1321,7 +1321,7 @@ function vim.api.nvim_get_current_win() end
 ---               of effective definition `:hi-link`.
 ---             • create: (boolean, default true) When highlight group doesn't
 ---               exist create it.
---- @return vim.api.keyset.hl_info
+--- @return vim.api.keyset.get_hl_info
 function vim.api.nvim_get_hl(ns_id, opts) end
 
 --- @deprecated

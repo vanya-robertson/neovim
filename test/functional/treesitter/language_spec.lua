@@ -8,6 +8,7 @@ local exec_lua = n.exec_lua
 local pcall_err = t.pcall_err
 local matches = t.matches
 local insert = n.insert
+local NIL = vim.NIL
 
 before_each(clear)
 
@@ -15,9 +16,11 @@ describe('treesitter language API', function()
   -- error tests not requiring a parser library
   it('handles missing language', function()
     eq(
-      ".../language.lua:0: no parser for 'borklang' language, see :help treesitter-parsers",
+      '.../treesitter.lua:0: Parser not found.',
       pcall_err(exec_lua, "parser = vim.treesitter.get_parser(0, 'borklang')")
     )
+
+    eq(NIL, exec_lua("return vim.treesitter._get_parser(0, 'borklang')"))
 
     -- actual message depends on platform
     matches(
@@ -54,11 +57,15 @@ describe('treesitter language API', function()
   end)
 
   it('inspects language', function()
-    local keys, fields, symbols = unpack(exec_lua([[
+    local keys, fields, symbols = unpack(exec_lua(function()
       local lang = vim.treesitter.language.inspect('c')
       local keys, symbols = {}, {}
-      for k,_ in pairs(lang) do
-        keys[k] = true
+      for k, v in pairs(lang) do
+        if type(v) == 'boolean' then
+          keys[k] = v
+        else
+          keys[k] = true
+        end
       end
 
       -- symbols array can have "holes" and is thus not a valid msgpack array
@@ -66,10 +73,10 @@ describe('treesitter language API', function()
       for _, v in pairs(lang.symbols) do
         table.insert(symbols, v)
       end
-      return {keys, lang.fields, symbols}
-    ]]))
+      return { keys, lang.fields, symbols }
+    end))
 
-    eq({ fields = true, symbols = true, _abi_version = true }, keys)
+    eq({ fields = true, symbols = true, _abi_version = true, _wasm = false }, keys)
 
     local fset = {}
     for _, f in pairs(fields) do
@@ -101,9 +108,10 @@ describe('treesitter language API', function()
       command('set filetype=borklang')
       -- Should throw an error when filetype changes to borklang
       eq(
-        ".../language.lua:0: no parser for 'borklang' language, see :help treesitter-parsers",
+        '.../treesitter.lua:0: Parser not found.',
         pcall_err(exec_lua, "new_parser = vim.treesitter.get_parser(0, 'borklang')")
       )
+      eq(NIL, exec_lua("return vim.treesitter._get_parser(0, 'borklang')"))
     end
   )
 
@@ -113,12 +121,14 @@ describe('treesitter language API', function()
         int x = 3;
       }]])
 
-    exec_lua([[
-      langtree = vim.treesitter.get_parser(0, "c")
-      tree = langtree:tree_for_range({1, 3, 1, 3})
-    ]])
-
-    eq('<node translation_unit>', exec_lua('return tostring(tree:root())'))
+    eq(
+      '<node translation_unit>',
+      exec_lua(function()
+        local langtree = vim.treesitter.get_parser(0, 'c')
+        local tree = langtree:tree_for_range({ 1, 3, 1, 3 })
+        return tostring(tree:root())
+      end)
+    )
   end)
 
   it('retrieve the tree given a range when range is out of bounds relative to buffer', function()
@@ -127,12 +137,14 @@ describe('treesitter language API', function()
         int x = 3;
       }]])
 
-    exec_lua([[
-      langtree = vim.treesitter.get_parser(0, "c")
-      tree = langtree:tree_for_range({10, 10, 10, 10})
-    ]])
-
-    eq('<node translation_unit>', exec_lua('return tostring(tree:root())'))
+    eq(
+      '<node translation_unit>',
+      exec_lua(function()
+        local langtree = vim.treesitter.get_parser(0, 'c')
+        local tree = langtree:tree_for_range({ 10, 10, 10, 10 })
+        return tostring(tree:root())
+      end)
+    )
   end)
 
   it('retrieve the node given a range', function()
@@ -141,11 +153,24 @@ describe('treesitter language API', function()
         int x = 3;
       }]])
 
+    eq(
+      '<node primitive_type>',
+      exec_lua(function()
+        local langtree = vim.treesitter.get_parser(0, 'c')
+        local node = langtree:named_node_for_range({ 1, 3, 1, 3 })
+        return tostring(node)
+      end)
+    )
+  end)
+
+  it('retrieve an anonymous node given a range', function()
+    insert([[vim.fn.input()]])
+
     exec_lua([[
-      langtree = vim.treesitter.get_parser(0, "c")
-      node = langtree:named_node_for_range({1, 3, 1, 3})
+      langtree = vim.treesitter.get_parser(0, "lua")
+      node = langtree:node_for_range({0, 3, 0, 3})
     ]])
 
-    eq('<node primitive_type>', exec_lua('return tostring(node)'))
+    eq('.', exec_lua('return node:type()'))
   end)
 end)

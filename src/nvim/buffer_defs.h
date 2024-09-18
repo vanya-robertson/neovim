@@ -712,7 +712,7 @@ struct file_buffer {
 
   Terminal *terminal;           // Terminal instance associated with the buffer
 
-  dict_T *additional_data;      // Additional data from shada file if any.
+  AdditionalData *additional_data;      // Additional data from shada file if any.
 
   int b_mapped_ctrl_c;          // modes where CTRL-C is mapped
 
@@ -739,8 +739,6 @@ struct file_buffer {
 
   // The number for times the current line has been flushed in the memline.
   int flush_count;
-
-  int b_diff_failed;    // internal diff failed for this buffer
 };
 
 // Stuff for diff mode.
@@ -1047,8 +1045,7 @@ struct window_S {
 
   win_T *w_prev;              ///< link to previous window
   win_T *w_next;              ///< link to next window
-  bool w_closing;                   ///< window is being closed, don't let
-                                    ///< autocommands close it too.
+  bool w_locked;                    ///< don't let autocommands close the window
 
   frame_T *w_frame;             ///< frame containing this window
 

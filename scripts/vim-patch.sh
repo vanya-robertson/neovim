@@ -156,7 +156,7 @@ assign_commit_details() {
     local munge_commit_line=true
   else
     # Interpret parameter as commit hash.
-    vim_version="${1:0:12}"
+    vim_version="${1:0:7}"
     vim_tag=
     vim_commit_ref="$vim_version"
     local munge_commit_line=false
@@ -299,10 +299,6 @@ preprocess_patch() {
 
   # Rename sponsor.txt to intro.txt
   LC_ALL=C sed -Ee 's/( [ab]\/runtime\/doc)\/sponsor\.txt/\1\/intro.txt/g' \
-    "$file" > "$file".tmp && mv "$file".tmp "$file"
-
-  # Rename terminal.txt to nvim_terminal_emulator.txt
-  LC_ALL=C sed -Ee 's/( [ab]\/runtime\/doc)\/terminal\.txt/\1\/nvim_terminal_emulator.txt/g' \
     "$file" > "$file".tmp && mv "$file".tmp "$file"
 
   # Rename test_urls.vim to check_urls.vim

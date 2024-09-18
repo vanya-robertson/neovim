@@ -765,7 +765,7 @@ formatexpr({opts})                                      *vim.lsp.formatexpr()*
     function.
 
     Currently only supports a single client. This can be set via
-    `setlocal formatexpr=v:lua.vim.lsp.formatexpr()` but will typically or in
+    `setlocal formatexpr=v:lua.vim.lsp.formatexpr()` or (more typically) in
     `on_attach` via
     `vim.bo[bufnr].formatexpr = 'v:lua.vim.lsp.formatexpr(#{timeout_ms:250})'`.
 
@@ -1486,6 +1486,15 @@ workspace_symbol({query}, {opts})             *vim.lsp.buf.workspace_symbol()*
 ==============================================================================
 Lua module: vim.lsp.diagnostic                                *lsp-diagnostic*
 
+from({diagnostics})                                *vim.lsp.diagnostic.from()*
+    Converts the input `vim.Diagnostic`s to LSP diagnostics.
+
+    Parameters: ~
+      • {diagnostics}  (`vim.Diagnostic[]`)
+
+    Return: ~
+        (`lsp.Diagnostic[]`)
+
                                           *vim.lsp.diagnostic.get_namespace()*
 get_namespace({client_id}, {is_pull})
     Get the diagnostic namespace associated with an LSP client
@@ -1630,6 +1639,8 @@ Lua module: vim.lsp.completion                                *lsp-completion*
     Fields: ~
       • {autotrigger}?  (`boolean`) Whether to trigger completion
                         automatically. Default: false
+      • {convert}?      (`fun(item: lsp.CompletionItem): table`) Transforms an
+                        LSP CompletionItem to |complete-items|.
 
 
                                                  *vim.lsp.completion.enable()*
@@ -2241,7 +2252,7 @@ symbols_to_items({symbols}, {bufnr})         *vim.lsp.util.symbols_to_items()*
 
     Parameters: ~
       • {symbols}  (`table`) DocumentSymbol[] or SymbolInformation[]
-      • {bufnr}    (`integer`)
+      • {bufnr}    (`integer?`)
 
 
 ==============================================================================

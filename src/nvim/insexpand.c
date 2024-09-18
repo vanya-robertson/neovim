@@ -39,6 +39,7 @@
 #include "nvim/globals.h"
 #include "nvim/highlight.h"
 #include "nvim/highlight_defs.h"
+#include "nvim/highlight_group.h"
 #include "nvim/indent.h"
 #include "nvim/indent_c.h"
 #include "nvim/insexpand.h"
@@ -170,6 +171,8 @@ struct compl_S {
   int cp_flags;                  ///< CP_ values
   int cp_number;                 ///< sequence number
   int cp_score;                  ///< fuzzy match score
+  int cp_user_hlattr;            ///< highlight attribute to combine with
+  int cp_user_kind_hlattr;       ///< highlight attribute for kind
 };
 
 /// state information used for getting the next set of insert completion
@@ -762,7 +765,7 @@ int ins_compl_add_infercase(char *str_arg, int len, bool icase, char *fname, Dir
     flags |= CP_ICASE;
   }
 
-  int res = ins_compl_add(str, len, fname, NULL, false, NULL, dir, flags, false);
+  int res = ins_compl_add(str, len, fname, NULL, false, NULL, dir, flags, false, -1, -1);
   xfree(tofree);
   return res;
 }
@@ -802,7 +805,7 @@ static inline void free_cptext(char *const *const cptext)
 ///         returned in case of error.
 static int ins_compl_add(char *const str, int len, char *const fname, char *const *const cptext,
                          const bool cptext_allocated, typval_T *user_data, const Direction cdir,
-                         int flags_arg, const bool adup)
+                         int flags_arg, const bool adup, int user_hlattr, int user_kind_hlattr)
   FUNC_ATTR_NONNULL_ARG(1)
 {
   compl_T *match;
@@ -868,6 +871,8 @@ static int ins_compl_add(char *const str, int len, char *const fname, char *cons
     match->cp_fname = NULL;
   }
   match->cp_flags = flags;
+  match->cp_user_hlattr = user_hlattr;
+  match->cp_user_kind_hlattr = user_kind_hlattr;
 
   if (cptext != NULL) {
     int i;
@@ -1001,7 +1006,7 @@ static void ins_compl_add_matches(int num_matches, char **matches, int icase)
   for (int i = 0; i < num_matches && add_r != FAIL; i++) {
     if ((add_r = ins_compl_add(matches[i], -1, NULL, NULL, false, NULL, dir,
                                CP_FAST | (icase ? CP_ICASE : 0),
-                               false)) == OK) {
+                               false, -1, -1)) == OK) {
       // If dir was BACKWARD then honor it just once.
       dir = FORWARD;
     }
@@ -1239,7 +1244,9 @@ static int ins_compl_build_pum(void)
         if (comp->cp_score > max_fuzzy_score) {
           did_find_shown_match = true;
           max_fuzzy_score = comp->cp_score;
-          compl_shown_match = comp;
+          if (!compl_no_select) {
+            compl_shown_match = comp;
+          }
         }
 
         if (!shown_match_ok && comp == compl_shown_match && !compl_no_select) {
@@ -1268,6 +1275,8 @@ static int ins_compl_build_pum(void)
       compl_match_array[i].pum_kind = comp->cp_text[CPT_KIND];
       compl_match_array[i].pum_info = comp->cp_text[CPT_INFO];
       compl_match_array[i].pum_score = comp->cp_score;
+      compl_match_array[i].pum_user_hlattr = comp->cp_user_hlattr;
+      compl_match_array[i].pum_user_kind_hlattr = comp->cp_user_kind_hlattr;
       if (comp->cp_text[CPT_MENU] != NULL) {
         compl_match_array[i++].pum_extra = comp->cp_text[CPT_MENU];
       } else {
@@ -1785,6 +1794,13 @@ int ins_compl_bs(void)
   return NUL;
 }
 
+/// Check if the complete function returned "always" in the "refresh" dictionary item.
+static bool ins_compl_refresh_always(void)
+  FUNC_ATTR_PURE
+{
+  return (ctrl_x_mode_function() || ctrl_x_mode_omni()) && compl_opt_refresh_always;
+}
+
 /// Check that we need to find matches again, ins_compl_restart() is to
 /// be called.
 static bool ins_compl_need_restart(void)
@@ -1792,9 +1808,7 @@ static bool ins_compl_need_restart(void)
 {
   // Return true if we didn't complete finding matches or when the
   // "completefunc" returned "always" in the "refresh" dictionary item.
-  return compl_was_interrupted
-         || ((ctrl_x_mode_function() || ctrl_x_mode_omni())
-             && compl_opt_refresh_always);
+  return compl_was_interrupted || ins_compl_refresh_always();
 }
 
 /// Called after changing "compl_leader".
@@ -1827,7 +1841,7 @@ static void ins_compl_new_leader(void)
 
   // Don't let Enter select the original text when there is no popup menu.
   // Don't let Enter select when use user function and refresh_always is set
-  if (compl_match_array == NULL || ins_compl_need_restart()) {
+  if (compl_match_array == NULL || ins_compl_refresh_always()) {
     compl_enter_selects = false;
   }
 }
@@ -2535,6 +2549,14 @@ theend:
   }
 }
 
+static inline int get_user_highlight_attr(const char *hlname)
+{
+  if (hlname != NULL && *hlname != NUL) {
+    return syn_name2attr(hlname);
+  }
+  return -1;
+}
+
 /// Add a match to the list of matches from Vimscript object
 ///
 /// @param[in]  tv  Object to get matches from.
@@ -2552,6 +2574,10 @@ static int ins_compl_add_tv(typval_T *const tv, const Direction dir, bool fast)
   bool empty = false;
   int flags = fast ? CP_FAST : 0;
   char *(cptext[CPT_COUNT]);
+  char *user_hlname = NULL;
+  char *user_kind_hlname = NULL;
+  int user_hlattr = -1;
+  int user_kind_hlattr = -1;
   typval_T user_data;
 
   user_data.v_type = VAR_UNKNOWN;
@@ -2561,6 +2587,13 @@ static int ins_compl_add_tv(typval_T *const tv, const Direction dir, bool fast)
     cptext[CPT_MENU] = tv_dict_get_string(tv->vval.v_dict, "menu", true);
     cptext[CPT_KIND] = tv_dict_get_string(tv->vval.v_dict, "kind", true);
     cptext[CPT_INFO] = tv_dict_get_string(tv->vval.v_dict, "info", true);
+
+    user_hlname = tv_dict_get_string(tv->vval.v_dict, "hl_group", false);
+    user_hlattr = get_user_highlight_attr(user_hlname);
+
+    user_kind_hlname = tv_dict_get_string(tv->vval.v_dict, "kind_hlgroup", false);
+    user_kind_hlattr = get_user_highlight_attr(user_kind_hlname);
+
     tv_dict_get_tv(tv->vval.v_dict, "user_data", &user_data);
 
     if (tv_dict_get_number(tv->vval.v_dict, "icase")) {
@@ -2582,7 +2615,7 @@ static int ins_compl_add_tv(typval_T *const tv, const Direction dir, bool fast)
     return FAIL;
   }
   int status = ins_compl_add((char *)word, -1, NULL, cptext, true,
-                             &user_data, dir, flags, dup);
+                             &user_data, dir, flags, dup, user_hlattr, user_kind_hlattr);
   if (status != OK) {
     tv_clear(&user_data);
   }
@@ -2675,7 +2708,7 @@ static void set_completion(colnr_T startcol, list_T *list)
     flags |= CP_ICASE;
   }
   if (ins_compl_add(compl_orig_text, -1, NULL, NULL, false, NULL, 0,
-                    flags | CP_FAST, false) != OK) {
+                    flags | CP_FAST, false, -1, -1) != OK) {
     return;
   }
 
@@ -3420,7 +3453,7 @@ static void get_next_bufname_token(void)
       char *tail = path_tail(b->b_sfname);
       if (strncmp(tail, compl_orig_text, strlen(compl_orig_text)) == 0) {
         ins_compl_add(tail, (int)strlen(tail), NULL, NULL, false, NULL, 0,
-                      p_ic ? CP_ICASE : 0, false);
+                      p_ic ? CP_ICASE : 0, false, -1, -1);
       }
     }
   }
@@ -4458,7 +4491,7 @@ static int ins_compl_start(void)
     flags |= CP_ICASE;
   }
   if (ins_compl_add(compl_orig_text, -1, NULL, NULL, false, NULL, 0,
-                    flags, false) != OK) {
+                    flags, false, -1, -1) != OK) {
     XFREE_CLEAR(compl_pattern);
     compl_patternlen = 0;
     XFREE_CLEAR(compl_orig_text);

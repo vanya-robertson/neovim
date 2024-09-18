@@ -20,7 +20,7 @@ local DEP_API_METADATA = 'build/funcs_metadata.mpack'
 
 local LUA_API_RETURN_OVERRIDES = {
   nvim_buf_get_command = 'table<string,vim.api.keyset.command_info>',
-  nvim_buf_get_extmark_by_id = 'vim.api.keyset.get_extmark_item',
+  nvim_buf_get_extmark_by_id = 'vim.api.keyset.get_extmark_item_by_id',
   nvim_buf_get_extmarks = 'vim.api.keyset.get_extmark_item[]',
   nvim_buf_get_keymap = 'vim.api.keyset.keymap[]',
   nvim_get_autocmds = 'vim.api.keyset.get_autocmds.ret[]',
@@ -29,11 +29,11 @@ local LUA_API_RETURN_OVERRIDES = {
   nvim_get_keymap = 'vim.api.keyset.keymap[]',
   nvim_get_mark = 'vim.api.keyset.get_mark',
 
-  -- Can also return table<string,vim.api.keyset.hl_info>, however we need to
+  -- Can also return table<string,vim.api.keyset.get_hl_info>, however we need to
   -- pick one to get some benefit.
   -- REVISIT lewrus01 (26/01/24): we can maybe add
-  -- @overload fun(ns: integer, {}): table<string,vim.api.keyset.hl_info>
-  nvim_get_hl = 'vim.api.keyset.hl_info',
+  -- @overload fun(ns: integer, {}): table<string,vim.api.keyset.get_hl_info>
+  nvim_get_hl = 'vim.api.keyset.get_hl_info',
 
   nvim_get_mode = 'vim.api.keyset.get_mode',
   nvim_get_namespaces = 'table<string,integer>',
@@ -376,6 +376,9 @@ end
 --- @param fun vim.EvalFn
 --- @param write fun(line: string)
 local function render_api_keyset_meta(_f, fun, write)
+  if string.sub(fun.name, 1, 1) == '_' then
+    return -- not exported
+  end
   write('')
   write('--- @class vim.api.keyset.' .. fun.name)
   for _, p in ipairs(fun.params) do

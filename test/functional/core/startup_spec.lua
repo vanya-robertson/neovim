@@ -27,7 +27,6 @@ local sleep = vim.uv.sleep
 local startswith = vim.startswith
 local write_file = t.write_file
 local api = n.api
-local alter_slashes = n.alter_slashes
 local is_os = t.is_os
 local dedent = t.dedent
 local tbl_map = vim.tbl_map
@@ -40,22 +39,15 @@ local testlog = 'Xtest-startupspec-log'
 describe('startup', function()
   it('--clean', function()
     clear()
-    ok(
-      string.find(
-        alter_slashes(api.nvim_get_option_value('runtimepath', {})),
-        fn.stdpath('config'),
-        1,
-        true
-      ) ~= nil
+    matches(
+      vim.pesc(t.fix_slashes(fn.stdpath('config'))),
+      t.fix_slashes(api.nvim_get_option_value('runtimepath', {}))
     )
+
     clear('--clean')
     ok(
-      string.find(
-        alter_slashes(api.nvim_get_option_value('runtimepath', {})),
-        fn.stdpath('config'),
-        1,
-        true
-      ) == nil
+      not t.fix_slashes(api.nvim_get_option_value('runtimepath', {}))
+        :match(vim.pesc(t.fix_slashes(fn.stdpath('config'))))
     )
   end)
 
@@ -111,6 +103,13 @@ describe('startup', function()
       [No Name]                                                   |
                                                                   |*2
     ]])
+  end)
+
+  it(':filetype detect enables filetype detection with -u NONE', function()
+    clear()
+    eq('filetype detection:OFF  plugin:OFF  indent:OFF', exec_capture('filetype'))
+    command('filetype detect')
+    eq('filetype detection:ON  plugin:OFF  indent:OFF', exec_capture('filetype'))
   end)
 end)
 

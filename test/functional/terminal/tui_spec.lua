@@ -7,7 +7,7 @@
 local t = require('test.testutil')
 local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local tt = require('test.functional.terminal.testutil')
+local tt = require('test.functional.testterm')
 
 local eq = t.eq
 local feed_data = tt.feed_data
@@ -630,6 +630,8 @@ describe('TUI', function()
       set mouse=a mousemodel=popup
 
       aunmenu PopUp
+      " Delete the default MenuPopup event handler.
+      autocmd! nvim_popupmenu
       menu PopUp.foo :let g:menustr = 'foo'<CR>
       menu PopUp.bar :let g:menustr = 'bar'<CR>
       menu PopUp.baz :let g:menustr = 'baz'<CR>
@@ -1968,9 +1970,9 @@ describe('TUI', function()
           if not req then
             return
           end
-          local url = req:match('\027]8;;(.*)$')
-          if url ~= nil then
-            table.insert(_G.urls, url)
+          local id, url = req:match('\027]8;id=(%d+);(.*)$')
+          if id ~= nil and url ~= nil then
+            table.insert(_G.urls, { id = tonumber(id), url = url })
           end
         end,
       })
@@ -1984,7 +1986,7 @@ describe('TUI', function()
       })
     ]])
     retry(nil, 1000, function()
-      eq({ 'https://example.com', '' }, exec_lua([[return _G.urls]]))
+      eq({ { id = 0xE1EA0000, url = 'https://example.com' } }, exec_lua([[return _G.urls]]))
     end)
   end)
 end)
@@ -2109,7 +2111,7 @@ describe('TUI', function()
     finally(function()
       os.remove('testF')
     end)
-    local screen = tt.screen_setup(
+    local screen = tt.setup_screen(
       0,
       ('"%s" -u NONE -i NONE --cmd "set noswapfile noshowcmd noruler" --cmd "normal iabc" > /dev/null 2>&1 && cat testF && rm testF'):format(
         nvim_prog

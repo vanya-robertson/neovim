@@ -268,12 +268,12 @@ function vim.fn.assert_exception(error, msg) end
 --- <
 --- If {msg} is empty then it is not used.  Do this to get the
 --- default message when passing the {lnum} argument.
----
+---           *E1115*
 --- When {lnum} is present and not negative, and the {error}
 --- argument is present and matches, then this is compared with
 --- the line number at which the error was reported. That can be
 --- the line number in a function or in a script.
----
+---           *E1116*
 --- When {context} is present it is used as a pattern and matched
 --- against the context (script name or function name) where
 --- {lnum} is located in.
@@ -1586,19 +1586,26 @@ function vim.fn.eventhandler() end
 --- This function checks if an executable with the name {expr}
 --- exists.  {expr} must be the name of the program without any
 --- arguments.
+---
 --- executable() uses the value of $PATH and/or the normal
---- searchpath for programs.    *PATHEXT*
+--- searchpath for programs.
+---           *PATHEXT*
 --- On MS-Windows the ".exe", ".bat", etc. can optionally be
 --- included.  Then the extensions in $PATHEXT are tried.  Thus if
 --- "foo.exe" does not exist, "foo.exe.bat" can be found.  If
---- $PATHEXT is not set then ".exe;.com;.bat;.cmd" is used.  A dot
+--- $PATHEXT is not set then ".com;.exe;.bat;.cmd" is used.  A dot
 --- by itself can be used in $PATHEXT to try using the name
 --- without an extension.  When 'shell' looks like a Unix shell,
 --- then the name is also tried without adding an extension.
 --- On MS-Windows it only checks if the file exists and is not a
 --- directory, not if it's really executable.
---- On Windows an executable in the same directory as Vim is
---- always found (it is added to $PATH at |startup|).
+--- On MS-Windows an executable in the same directory as the Vim
+--- executable is always found (it's added to $PATH at |startup|).
+---       *NoDefaultCurrentDirectoryInExePath*
+--- On MS-Windows an executable in Vim's current working directory
+--- is also normally found, but this can be disabled by setting
+--- the $NoDefaultCurrentDirectoryInExePath environment variable.
+---
 --- The result is a Number:
 ---   1  exists
 ---   0  does not exist
@@ -1992,6 +1999,19 @@ function vim.fn.feedkeys(string, mode) end
 --- @param file string
 --- @return any
 function vim.fn.file_readable(file) end
+
+--- Copy the file pointed to by the name {from} to {to}. The
+--- result is a Number, which is |TRUE| if the file was copied
+--- successfully, and |FALSE| when it failed.
+--- If a file with name {to} already exists, it will fail.
+--- Note that it does not handle directories (yet).
+---
+--- This function is not available in the |sandbox|.
+---
+--- @param from string
+--- @param to string
+--- @return 0|1
+function vim.fn.filecopy(from, to) end
 
 --- The result is a Number, which is |TRUE| when a file with the
 --- name {file} exists, and can be read.  If {file} doesn't exist,
@@ -2841,7 +2861,7 @@ function vim.fn.getcharpos(expr) end
 ---   nnoremap <expr> , getcharsearch().forward ? ',' : ';'
 --- <Also see |setcharsearch()|.
 ---
---- @return table[]
+--- @return table
 function vim.fn.getcharsearch() end
 
 --- Get a single character from the user or input stream as a
@@ -4646,6 +4666,24 @@ function vim.fn.interrupt() end
 --- @return any
 function vim.fn.invert(expr) end
 
+--- The result is a Number, which is |TRUE| when {path} is an
+--- absolute path.
+--- On Unix, a path is considered absolute when it starts with '/'.
+--- On MS-Windows, it is considered absolute when it starts with an
+--- optional drive prefix and is followed by a '\' or '/'. UNC paths
+--- are always absolute.
+--- Example: >vim
+---   echo isabsolutepath('/usr/share/')  " 1
+---   echo isabsolutepath('./foobar')    " 0
+---   echo isabsolutepath('C:\Windows')  " 1
+---   echo isabsolutepath('foobar')    " 0
+---   echo isabsolutepath('\\remote\file')  " 1
+--- <
+---
+--- @param path any
+--- @return 0|1
+function vim.fn.isabsolutepath(path) end
+
 --- The result is a Number, which is |TRUE| when a directory
 --- with the name {directory} exists.  If {directory} doesn't
 --- exist, or isn't a directory, the result is |FALSE|.  {directory}
@@ -4699,6 +4737,10 @@ function vim.fn.isnan(expr) end
 ---   for [key, value] in items(mydict)
 ---      echo key .. ': ' .. value
 ---   endfor
+--- <
+--- A List or a String argument is also supported.  In these
+--- cases, items() returns a List with the index and the value at
+--- the index.
 ---
 --- @param dict any
 --- @return any
@@ -5220,6 +5262,7 @@ function vim.fn.map(expr1, expr2) end
 ---   "lhsrawalt" The {lhs} of the mapping as raw bytes, alternate
 ---         form, only present when it differs from "lhsraw"
 ---   "rhs"       The {rhs} of the mapping as typed.
+---   "callback" Lua function, if RHS was defined as such.
 ---   "silent"   1 for a |:map-silent| mapping, else 0.
 ---   "noremap"  1 if the {rhs} of the mapping is not remappable.
 ---   "script"   1 if mapping was defined with <script>.
@@ -6660,7 +6703,7 @@ function vim.fn.printf(fmt, expr1) end
 --- If the buffer doesn't exist or isn't a prompt buffer, an empty
 --- string is returned.
 ---
---- @param buf any
+--- @param buf integer|string
 --- @return any
 function vim.fn.prompt_getprompt(buf) end
 
@@ -6695,8 +6738,8 @@ function vim.fn.prompt_getprompt(buf) end
 ---    endfunc
 ---    call prompt_setcallback(bufnr(), function('s:TextEntered'))
 ---
---- @param buf any
---- @param expr any
+--- @param buf integer|string
+--- @param expr string|function
 --- @return any
 function vim.fn.prompt_setcallback(buf, expr) end
 
@@ -6708,8 +6751,8 @@ function vim.fn.prompt_setcallback(buf, expr) end
 --- mode.  Without setting a callback Vim will exit Insert mode,
 --- as in any buffer.
 ---
---- @param buf any
---- @param expr any
+--- @param buf integer|string
+--- @param expr string|function
 --- @return any
 function vim.fn.prompt_setinterrupt(buf, expr) end
 
@@ -6720,8 +6763,8 @@ function vim.fn.prompt_setinterrupt(buf, expr) end
 ---   call prompt_setprompt(bufnr(''), 'command: ')
 --- <
 ---
---- @param buf any
---- @param text any
+--- @param buf integer|string
+--- @param text string
 --- @return any
 function vim.fn.prompt_setprompt(buf, text) end
 
@@ -7377,6 +7420,9 @@ function vim.fn.screenstring(row, col) end
 --- {timeout} is 500 the search stops after half a second.
 --- The value must not be negative.  A zero value is like not
 --- giving the argument.
+---
+--- Note: the timeout is only considered when searching, not
+--- while evaluating the {skip} expression.
 ---
 --- If the {skip} expression is given it is evaluated with the
 --- cursor positioned on the start of a match.  If it evaluates to
@@ -10361,7 +10407,7 @@ function vim.fn.undofile(name) end
 ---     item.
 ---
 --- @param buf? integer|string
---- @return any
+--- @return vim.fn.undotree.ret
 function vim.fn.undotree(buf) end
 
 --- Remove second and succeeding copies of repeated adjacent

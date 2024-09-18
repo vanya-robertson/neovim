@@ -22,6 +22,7 @@
 #include "nvim/memory_defs.h"
 #include "nvim/msgpack_rpc/channel.h"
 #include "nvim/msgpack_rpc/channel_defs.h"
+#include "nvim/os/os.h"
 #include "nvim/os/os_defs.h"
 #include "nvim/tui/tui.h"
 #include "nvim/tui/tui_defs.h"
@@ -126,6 +127,11 @@ void ui_client_run(bool remote_ui)
 
   ui_client_attach(width, height, term, rgb);
 
+  // TODO(justinmk): this is for log_spec. Can remove this after nvim_log #7062 is merged.
+  if (os_env_exists("__NVIM_TEST_LOG")) {
+    ELOG("test log message");
+  }
+
   // os_exit() will be invoked when the client channel detaches
   while (true) {
     LOOP_PROCESS_EVENTS(&main_loop, resize_events, -1);
@@ -174,7 +180,7 @@ static HlAttrs ui_client_dict2hlattrs(Dictionary d, bool rgb)
 {
   Error err = ERROR_INIT;
   Dict(highlight) dict = KEYDICT_INIT;
-  if (!api_dict_to_keydict(&dict, KeyDict_highlight_get_field, d, &err)) {
+  if (!api_dict_to_keydict(&dict, DictHash(highlight), d, &err)) {
     // TODO(bfredl): log "err"
     return HLATTRS_INIT;
   }

@@ -170,28 +170,26 @@ static void margin_columns_win(win_T *wp, int *left_col, int *right_col)
   // cache previous calculations depending on w_virtcol
   static int saved_w_virtcol;
   static win_T *prev_wp;
+  static int prev_width1;
+  static int prev_width2;
   static int prev_left_col;
   static int prev_right_col;
-  static int prev_col_off;
 
   int cur_col_off = win_col_off(wp);
-  int width1;
-  int width2;
+  int width1 = wp->w_width_inner - cur_col_off;
+  int width2 = width1 + win_col_off2(wp);
 
   if (saved_w_virtcol == wp->w_virtcol && prev_wp == wp
-      && prev_col_off == cur_col_off) {
+      && prev_width1 == width1 && prev_width2 == width2) {
     *right_col = prev_right_col;
     *left_col = prev_left_col;
     return;
   }
 
-  width1 = wp->w_width_inner - cur_col_off;
-  width2 = width1 + win_col_off2(wp);
-
   *left_col = 0;
   *right_col = width1;
 
-  if (wp->w_virtcol >= (colnr_T)width1) {
+  if (wp->w_virtcol >= (colnr_T)width1 && width2 > 0) {
     *right_col = width1 + ((wp->w_virtcol - width1) / width2 + 1) * width2;
   }
   if (wp->w_virtcol >= (colnr_T)width1 && width2 > 0) {
@@ -202,8 +200,9 @@ static void margin_columns_win(win_T *wp, int *left_col, int *right_col)
   prev_left_col = *left_col;
   prev_right_col = *right_col;
   prev_wp = wp;
+  prev_width1 = width1;
+  prev_width2 = width2;
   saved_w_virtcol = wp->w_virtcol;
-  prev_col_off = cur_col_off;
 }
 
 /// Put a single char from an UTF-8 buffer into a line buffer.
@@ -886,9 +885,7 @@ static int get_rightmost_vcol(win_T *wp, const int *color_cols)
   if (color_cols) {
     // determine rightmost colorcolumn to possibly draw
     for (int i = 0; color_cols[i] >= 0; i++) {
-      if (ret < color_cols[i]) {
-        ret = color_cols[i];
-      }
+      ret = MAX(ret, color_cols[i]);
     }
   }
 
@@ -1158,7 +1155,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
     area_highlighting = true;
   }
   VirtLines virt_lines = KV_INITIAL_VALUE;
-  wlv.n_virt_lines = decor_virt_lines(wp, lnum, &virt_lines, has_fold);
+  wlv.n_virt_lines = decor_virt_lines(wp, lnum - 1, lnum, &virt_lines, true);
   wlv.filler_lines += wlv.n_virt_lines;
   if (lnum == wp->w_topline) {
     wlv.filler_lines = wp->w_topfill;
@@ -1828,7 +1825,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
 
         // If a double-width char doesn't fit display a '>' in the last column.
         // Don't advance the pointer but put the character at the start of the next line.
-        if (wlv.col >= grid->cols - 1 && utf_char2cells(mb_c) == 2) {
+        if (wlv.col >= grid->cols - 1 && schar_cells(mb_schar) == 2) {
           mb_c = '>';
           mb_l = 1;
           (void)mb_l;
@@ -1924,7 +1921,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
       // If a double-width char doesn't fit display a '>' in the
       // last column; the character is displayed at the start of the
       // next line.
-      if (wlv.col >= grid->cols - 1 && utf_char2cells(mb_c) == 2) {
+      if (wlv.col >= grid->cols - 1 && schar_cells(mb_schar) == 2) {
         mb_schar = schar_from_ascii('>');
         mb_c = '>';
         mb_l = 1;
@@ -2395,6 +2392,12 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
                 || (decor_conceal && decor_state.conceal_char)
                 || wp->w_p_cole == 1)
             && wp->w_p_cole != 3) {
+          if (schar_cells(mb_schar) > 1) {
+            // When the first char to be concealed is double-width,
+            // need to advance one more virtual column.
+            wlv.n_extra++;
+          }
+
           // First time at this concealed item: display one
           // character.
           if (has_match_conc && match_conc) {
@@ -2410,12 +2413,6 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
             mb_schar = wp->w_p_lcs_chars.conceal;
           } else {
             mb_schar = schar_from_ascii(' ');
-          }
-
-          if (utf_char2cells(mb_c) > 1) {
-            // When the first char to be concealed is double-width,
-            // need to advance one more virtual column.
-            wlv.n_extra++;
           }
 
           mb_c = schar_get_first_codepoint(mb_schar);
@@ -2486,7 +2483,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
         && mb_schar != NUL) {
       mb_schar = wp->w_p_lcs_chars.prec;
       lcs_prec_todo = NUL;
-      if (utf_char2cells(mb_c) > 1) {
+      if (schar_cells(mb_schar) > 1) {
         // Double-width character being overwritten by the "precedes"
         // character, need to fill up half the character.
         wlv.sc_extra = schar_from_ascii(MB_FILLER_CHAR);
@@ -2560,9 +2557,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
       // Highlight 'cursorcolumn' & 'colorcolumn' past end of the line.
 
       // check if line ends before left margin
-      if (wlv.vcol < start_col + wlv.col - win_col_off(wp)) {
-        wlv.vcol = start_col + wlv.col - win_col_off(wp);
-      }
+      wlv.vcol = MAX(wlv.vcol, start_col + wlv.col - win_col_off(wp));
       // Get rid of the boguscols now, we want to draw until the right
       // edge for 'cursorcolumn'.
       wlv.col -= wlv.boguscols;
@@ -2729,7 +2724,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
 
       linebuf_vcol[wlv.off] = wlv.vcol;
 
-      if (utf_char2cells(mb_c) > 1) {
+      if (schar_cells(mb_schar) > 1) {
         // Need to fill two screen columns.
         wlv.off++;
         wlv.col++;
@@ -2748,7 +2743,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
       wlv.off++;
       wlv.col++;
     } else if (wp->w_p_cole > 0 && is_concealing) {
-      bool concealed_wide = utf_char2cells(mb_c) > 1;
+      bool concealed_wide = schar_cells(mb_schar) > 1;
 
       wlv.skip_cells--;
       wlv.vcol_off_co++;

@@ -113,9 +113,11 @@ do
     local gx_desc =
       'Opens filepath or URI under cursor with the system handler (file explorer, web browser, …)'
     vim.keymap.set({ 'n' }, 'gx', function()
-      local err = do_open(require('vim.ui')._get_url())
-      if err then
-        vim.notify(err, vim.log.levels.ERROR)
+      for _, url in ipairs(require('vim.ui')._get_urls()) do
+        local err = do_open(url)
+        if err then
+          vim.notify(err, vim.log.levels.ERROR)
+        end
       end
     end, { desc = gx_desc })
     vim.keymap.set({ 'x' }, 'gx', function()
@@ -211,8 +213,11 @@ end
 --- Default menus
 do
   --- Right click popup menu
-  -- TODO VimScript, no l10n
   vim.cmd([[
+    anoremenu PopUp.Go\ to\ definition      <Cmd>lua vim.lsp.buf.definition()<CR>
+    amenu     PopUp.Open\ in\ web\ browser  gx
+    anoremenu PopUp.Inspect                 <Cmd>Inspect<CR>
+    anoremenu PopUp.-1-                     <Nop>
     vnoremenu PopUp.Cut                     "+x
     vnoremenu PopUp.Copy                    "+y
     anoremenu PopUp.Paste                   "+gP
@@ -221,10 +226,36 @@ do
     nnoremenu PopUp.Select\ All             ggVG
     vnoremenu PopUp.Select\ All             gg0oG$
     inoremenu PopUp.Select\ All             <C-Home><C-O>VG
-    anoremenu PopUp.Inspect                 <Cmd>Inspect<CR>
-    anoremenu PopUp.-1-                     <Nop>
+    anoremenu PopUp.-2-                     <Nop>
     anoremenu PopUp.How-to\ disable\ mouse  <Cmd>help disable-mouse<CR>
   ]])
+
+  local function enable_ctx_menu(ctx)
+    vim.cmd([[
+      amenu disable PopUp.Go\ to\ definition
+      amenu disable PopUp.Open\ in\ web\ browser
+    ]])
+
+    if ctx == 'url' then
+      vim.cmd([[amenu enable PopUp.Open\ in\ web\ browser]])
+    elseif ctx == 'lsp' then
+      vim.cmd([[anoremenu enable PopUp.Go\ to\ definition]])
+    end
+  end
+
+  local nvim_popupmenu_augroup = vim.api.nvim_create_augroup('nvim_popupmenu', {})
+  vim.api.nvim_create_autocmd('MenuPopup', {
+    pattern = '*',
+    group = nvim_popupmenu_augroup,
+    desc = 'Mouse popup menu',
+    -- nested = true,
+    callback = function()
+      local urls = require('vim.ui')._get_urls()
+      local url = vim.startswith(urls[1], 'http')
+      local ctx = url and 'url' or (vim.lsp.get_clients({ bufnr = 0 })[1] and 'lsp' or nil)
+      enable_ctx_menu(ctx)
+    end,
+  })
 end
 
 --- Default autocommands. See |default-autocmds|

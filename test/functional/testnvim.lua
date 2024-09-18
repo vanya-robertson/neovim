@@ -14,8 +14,7 @@ local is_os = t.is_os
 local ok = t.ok
 local sleep = uv.sleep
 
---- This module uses functions from the context of the test session, i.e. in the context of the
---- nvim being tests.
+--- Functions executing in the current nvim session/process being tested.
 local M = {}
 
 local runtime_set = 'set runtimepath^=./build/lib/nvim/'
@@ -251,6 +250,8 @@ function M.set_method_error(err)
   method_error = err
 end
 
+--- Runs the event loop of the given session.
+---
 --- @param lsession test.Session
 --- @param request_cb function?
 --- @param notification_cb function?
@@ -297,6 +298,7 @@ function M.run_session(lsession, request_cb, notification_cb, setup_cb, timeout)
   return lsession.eof_err
 end
 
+--- Runs the event loop of the current global session.
 function M.run(request_cb, notification_cb, setup_cb, timeout)
   assert(session)
   return M.run_session(session, request_cb, notification_cb, setup_cb, timeout)
@@ -835,9 +837,18 @@ function M.exec_capture(code)
   return M.api.nvim_exec2(code, { output = true }).output
 end
 
---- @param code string
+--- @param code string|function
 --- @return any
 function M.exec_lua(code, ...)
+  if type(code) == 'function' then
+    return M.api.nvim_exec_lua(
+      [[
+      local code = ...
+      return loadstring(code)(select(2, ...))
+    ]],
+      { string.dump(code), ... }
+    )
+  end
   return M.api.nvim_exec_lua(code, { ... })
 end
 
@@ -892,26 +903,6 @@ function M.missing_provider(provider)
     return M.exec_lua([[return {require('vim.provider.python').detect_by_module('neovim')}]])[2]
   end
   assert(false, 'Unknown provider: ' .. provider)
-end
-
---- @param obj string|table
---- @return any
-function M.alter_slashes(obj)
-  if not is_os('win') then
-    return obj
-  end
-  if type(obj) == 'string' then
-    local ret = obj:gsub('/', '\\')
-    return ret
-  elseif type(obj) == 'table' then
-    --- @cast obj table<any,any>
-    local ret = {} --- @type table<any,any>
-    for k, v in pairs(obj) do
-      ret[k] = M.alter_slashes(v)
-    end
-    return ret
-  end
-  assert(false, 'expected string or table of strings, got ' .. type(obj))
 end
 
 local load_factor = 1

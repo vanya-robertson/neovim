@@ -74,8 +74,7 @@ describe('vim.loader', function()
       vim.loader.enable()
     ]]
 
-    local tmp = t.tmpname()
-    assert(os.remove(tmp))
+    local tmp = t.tmpname(false)
     assert(t.mkdir(tmp))
     assert(t.mkdir(tmp .. '/%'))
     local tmp1 = tmp .. '/%/x'
@@ -87,5 +86,16 @@ describe('vim.loader', function()
     vim.uv.fs_utime(tmp2, 0, 0)
     eq(1, exec_lua('return loadfile(...)()', tmp1))
     eq(2, exec_lua('return loadfile(...)()', tmp2))
+  end)
+
+  it('correct indent on error message (#29809)', function()
+    local errmsg = exec_lua [[
+      vim.loader.enable()
+      local _, errmsg = pcall(require, 'non_existent_module')
+      return errmsg
+    ]]
+    local errors = vim.split(errmsg, '\n')
+    eq("\tcache_loader: module 'non_existent_module' not found", errors[3])
+    eq("\tcache_loader_lib: module 'non_existent_module' not found", errors[4])
   end)
 end)

@@ -327,6 +327,35 @@ describe('float window', function()
     eq(12, pos[2])
   end)
 
+  it('error message when invalid field specified for split', function()
+    local bufnr = api.nvim_create_buf(false, true)
+    eq(
+      "non-float cannot have 'row'",
+      pcall_err(api.nvim_open_win, bufnr, true, { split = 'right', row = 10 })
+    )
+    eq(
+      "non-float cannot have 'col'",
+      pcall_err(api.nvim_open_win, bufnr, true, { split = 'right', col = 10 })
+    )
+    eq(
+      "non-float cannot have 'bufpos'",
+      pcall_err(api.nvim_open_win, bufnr, true, { split = 'right', bufpos = { 0, 0 } })
+    )
+    local winid = api.nvim_open_win(bufnr, true, { split = 'right' })
+    eq(
+      "non-float cannot have 'row'",
+      pcall_err(api.nvim_win_set_config, winid, { split = 'right', row = 10 })
+    )
+    eq(
+      "non-float cannot have 'col'",
+      pcall_err(api.nvim_win_set_config, winid, { split = 'right', col = 10 })
+    )
+    eq(
+      "non-float cannot have 'bufpos'",
+      pcall_err(api.nvim_win_set_config, winid, { split = 'right', bufpos = { 0, 0 } })
+    )
+  end)
+
   it('error message when reconfig missing relative field', function()
     local bufnr = api.nvim_create_buf(false, true)
     local opts = {
@@ -337,15 +366,16 @@ describe('float window', function()
       relative = 'editor',
       style = 'minimal',
     }
-    local win_id = api.nvim_open_win(bufnr, true, opts)
+    local winid = api.nvim_open_win(bufnr, true, opts)
     eq(
-    "Missing 'relative' field when reconfiguring floating window 1001",
-    pcall_err(api.nvim_win_set_config, win_id, {
-      width = 3,
-      height = 3,
-      row = 10,
-      col = 10,
-    }))
+      "Missing 'relative' field when reconfiguring floating window 1001",
+      pcall_err(api.nvim_win_set_config, winid, {
+        width = 3,
+        height = 3,
+        row = 10,
+        col = 10,
+      })
+    )
   end)
 
   it('is not operated on by windo when non-focusable #15374', function()
@@ -1313,6 +1343,53 @@ describe('float window', function()
           {0:~         }{16:~                   }{0:          }|*3
                                                   |
         ]])
+      end
+
+      --
+      -- floating windows inherit NormalFloat from global-ns.
+      --
+      command('fclose')
+      command('hi NormalFloat guibg=LightRed')
+      api.nvim_open_win(0, false, { relative = 'win', row = 3, col = 3, width = 12, height = 3, style = 'minimal' })
+      api.nvim_set_hl_ns(api.nvim_create_namespace('test1'))
+      if multigrid then
+        screen:expect({
+          grid = [[
+          ## grid 1
+            [2:----------------------------------------]|*6
+            [3:----------------------------------------]|
+          ## grid 2
+            {14:  1 }^x                                   |
+            {14:  2 }y                                   |
+            {14:  3 }                                    |
+            {0:~                                       }|*3
+          ## grid 3
+                                                    |
+          ## grid 5
+            {22:x           }|
+            {22:y           }|
+            {22:            }|
+          ]], float_pos={
+          [5] = {1002, "NW", 2, 3, 3, true, 50};
+        }, win_viewport={
+          [2] = {win = 1000, topline = 0, botline = 4, curline = 0, curcol = 0, linecount = 3, sum_scroll_delta = 0};
+          [5] = {win = 1002, topline = 0, botline = 3, curline = 0, curcol = 0, linecount = 3, sum_scroll_delta = 0};
+        }, win_viewport_margins={
+          [2] = { bottom = 0, left = 0, right = 0, top = 0, win = 1000 },
+          [5] = { bottom = 0, left = 0, right = 0, top = 0, win = 1002 }
+        }})
+      else
+        screen:expect({
+          grid = [[
+            {14:  1 }^x                                   |
+            {14:  2 }y                                   |
+            {14:  3 }                                    |
+            {0:~  }{22:x           }{0:                         }|
+            {0:~  }{22:y           }{0:                         }|
+            {0:~  }{22:            }{0:                         }|
+                                                    |
+          ]]
+        })
       end
     end)
 

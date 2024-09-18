@@ -174,9 +174,15 @@ end
 -- luacheck: push no unused args
 -- luacheck: push ignore 122
 
--- Filetypes based on file extension
+-- Filetype detection logic is encoded in three tables:
+-- 1. `extension` for literal extension lookup
+-- 2. `filename` for literal full path or basename lookup;
+-- 3. `pattern` for matching filenames or paths against Lua patterns,
+--     optimized for fast lookup.
+-- See `:h dev-vimpatch-filetype` for guidance when porting Vim filetype patches.
+
 ---@diagnostic disable: unused-local
---- @type vim.filetype.mapping
+---@type vim.filetype.mapping
 local extension = {
   -- BEGIN EXTENSION
   ['8th'] = '8th',
@@ -273,6 +279,9 @@ local extension = {
   cfm = 'cf',
   cfi = 'cf',
   hgrc = 'cfg',
+  cfg = detect.cfg,
+  Cfg = detect.cfg,
+  CFG = detect.cfg,
   chf = 'ch',
   chai = 'chaiscript',
   ch = detect.change,
@@ -355,6 +364,9 @@ local extension = {
   dart = 'dart',
   drt = 'dart',
   ds = 'datascript',
+  dat = detect.dat,
+  Dat = detect.dat,
+  DAT = detect.dat,
   dcd = 'dcd',
   decl = detect.decl,
   dec = detect.decl,
@@ -485,7 +497,19 @@ local extension = {
   gift = 'gift',
   prettierignore = 'gitignore',
   gleam = 'gleam',
+  vert = 'glsl',
+  tesc = 'glsl',
+  tese = 'glsl',
   glsl = 'glsl',
+  geom = 'glsl',
+  frag = 'glsl',
+  comp = 'glsl',
+  rgen = 'glsl',
+  rmiss = 'glsl',
+  rchit = 'glsl',
+  rahit = 'glsl',
+  rint = 'glsl',
+  rcall = 'glsl',
   gn = 'gn',
   gni = 'gn',
   gnuplot = 'gnuplot',
@@ -588,6 +612,7 @@ local extension = {
   jsx = 'javascriptreact',
   clp = 'jess',
   jgr = 'jgraph',
+  jinja = 'jinja',
   jjdescription = 'jj',
   j73 = 'jovial',
   jov = 'jovial',
@@ -623,6 +648,9 @@ local extension = {
   kts = 'kotlin',
   kt = 'kotlin',
   ktm = 'kotlin',
+  sub = 'krl',
+  Sub = 'krl',
+  SUB = 'krl',
   ks = 'kscript',
   k = 'kwt',
   ACE = 'lace',
@@ -656,6 +684,9 @@ local extension = {
   lt = 'lite',
   lite = 'lite',
   livemd = 'livebook',
+  log = detect.log,
+  Log = detect.log,
+  LOG = detect.log,
   lgt = 'logtalk',
   lotos = 'lotos',
   lot = detect_line1('\\contentsline', 'tex', 'lotos'),
@@ -681,8 +712,8 @@ local extension = {
     return not (path:find('html%.m4$') or path:find('fvwm2rc')) and 'm4' or nil
   end,
   eml = 'mail',
-  mk = 'make',
-  mak = 'make',
+  mk = detect.make,
+  mak = detect.make,
   page = 'mallard',
   map = 'map',
   mws = 'maple',
@@ -695,7 +726,6 @@ local extension = {
   markdown = detect.markdown,
   mdown = detect.markdown,
   mhtml = 'mason',
-  comp = 'mason',
   mason = 'mason',
   master = 'master',
   mas = 'master',
@@ -723,6 +753,9 @@ local extension = {
   wl = 'mma',
   mmp = 'mmp',
   mms = detect.mms,
+  mod = detect.mod,
+  Mod = detect.mod,
+  MOD = detect.mod,
   DEF = 'modula2',
   m3 = 'modula3',
   i3 = 'modula3',
@@ -752,6 +785,14 @@ local extension = {
   n1ql = 'n1ql',
   nql = 'n1ql',
   nanorc = 'nanorc',
+  NSA = 'natural',
+  NSC = 'natural',
+  NSG = 'natural',
+  NSL = 'natural',
+  NSM = 'natural',
+  NSN = 'natural',
+  NSP = 'natural',
+  NSS = 'natural',
   ncf = 'ncf',
   nginx = 'nginx',
   nim = 'nim',
@@ -761,6 +802,15 @@ local extension = {
   nix = 'nix',
   norg = 'norg',
   nqc = 'nqc',
+  ['1'] = detect.nroff,
+  ['2'] = detect.nroff,
+  ['3'] = detect.nroff,
+  ['4'] = detect.nroff,
+  ['5'] = detect.nroff,
+  ['6'] = detect.nroff,
+  ['7'] = detect.nroff,
+  ['8'] = detect.nroff,
+  ['9'] = detect.nroff,
   roff = 'nroff',
   tmac = 'nroff',
   man = 'nroff',
@@ -792,6 +842,14 @@ local extension = {
   ['or'] = 'openroad',
   scad = 'openscad',
   ovpn = 'openvpn',
+  opl = 'opl',
+  opL = 'opl',
+  oPl = 'opl',
+  oPL = 'opl',
+  Opl = 'opl',
+  OpL = 'opl',
+  OPl = 'opl',
+  OPL = 'opl',
   ora = 'ora',
   org = 'org',
   org_archive = 'org',
@@ -823,6 +881,16 @@ local extension = {
   ctp = 'php',
   php = 'php',
   phpt = 'php',
+  php0 = 'php',
+  php1 = 'php',
+  php2 = 'php',
+  php3 = 'php',
+  php4 = 'php',
+  php5 = 'php',
+  php6 = 'php',
+  php7 = 'php',
+  php8 = 'php',
+  php9 = 'php',
   phtml = 'php',
   theme = 'php',
   pike = 'pike',
@@ -855,6 +923,9 @@ local extension = {
   it = 'ppwiz',
   ih = 'ppwiz',
   action = 'privoxy',
+  prg = detect.prg,
+  Prg = detect.prg,
+  PRG = detect.prg,
   pc = 'proc',
   pdb = 'prolog',
   pml = 'promela',
@@ -953,6 +1024,7 @@ local extension = {
   rake = 'ruby',
   rs = 'rust',
   sage = 'sage',
+  sls = 'salt',
   sas = 'sas',
   sass = 'sass',
   sa = 'sather',
@@ -1032,6 +1104,9 @@ local extension = {
   sqi = 'sqr',
   sqr = 'sqr',
   nut = 'squirrel',
+  src = detect.src,
+  Src = detect.src,
+  SRC = detect.src,
   s28 = 'srec',
   s37 = 'srec',
   srec = 'srec',
@@ -1056,8 +1131,12 @@ local extension = {
   svelte = 'svelte',
   svg = 'svg',
   swift = 'swift',
+  swiftinterface = 'swift',
   swig = 'swig',
   swg = 'swig',
+  sys = detect.sys,
+  Sys = detect.sys,
+  SYS = detect.sys,
   svh = 'systemverilog',
   sv = 'systemverilog',
   cmm = 'trace32',
@@ -1235,6 +1314,8 @@ local extension = {
   z8a = 'z8a',
   zig = 'zig',
   zon = 'zig',
+  ziggy = 'ziggy',
+  ['ziggy-schema'] = 'ziggy_schema',
   zu = 'zimbu',
   zut = 'zimbutempl',
   zs = 'zserio',
@@ -1304,7 +1385,7 @@ local extension = {
   -- END EXTENSION
 }
 
---- @type vim.filetype.mapping
+---@type vim.filetype.mapping
 local filename = {
   -- BEGIN FILENAME
   ['a2psrc'] = 'a2ps',
@@ -1319,7 +1400,17 @@ local filename = {
   ['/.aptitude/config'] = 'aptconf',
   ['=tagging-method'] = 'arch',
   ['.arch-inventory'] = 'arch',
+  ['makefile.am'] = 'automake',
+  ['Makefile.am'] = 'automake',
   ['GNUmakefile.am'] = 'automake',
+  ['.bash_aliases'] = detect.bash,
+  ['.bash-aliases'] = detect.bash,
+  ['.bash_history'] = detect.bash,
+  ['.bash-history'] = detect.bash,
+  ['.bash_logout'] = detect.bash,
+  ['.bash-logout'] = detect.bash,
+  ['.bash_profile'] = detect.bash,
+  ['.bash-profile'] = detect.bash,
   ['named.root'] = 'bindzone',
   WORKSPACE = 'bzl',
   ['WORKSPACE.bzlmod'] = 'bzl',
@@ -1439,6 +1530,7 @@ local filename = {
   gnashpluginrc = 'gnash',
   gnashrc = 'gnash',
   ['.gnuplot_history'] = 'gnuplot',
+  ['goaccess.conf'] = 'goaccess',
   ['go.sum'] = 'gosum',
   ['go.work.sum'] = 'gosum',
   ['go.work'] = 'gowork',
@@ -1481,6 +1573,7 @@ local filename = {
   ['.prettierrc'] = 'json',
   ['.stylelintrc'] = 'json',
   ['.lintstagedrc'] = 'json',
+  ['deno.lock'] = 'json',
   ['flake.lock'] = 'json',
   ['.babelrc'] = 'jsonc',
   ['.eslintrc'] = 'jsonc',
@@ -1492,6 +1585,8 @@ local filename = {
   ['.swrc'] = 'jsonc',
   ['.vsconfig'] = 'jsonc',
   ['.justfile'] = 'just',
+  ['justfile'] = 'just',
+  ['Justfile'] = 'just',
   Kconfig = 'kconfig',
   ['Kconfig.debug'] = 'kconfig',
   ['Config.in'] = 'kconfig',
@@ -1543,6 +1638,8 @@ local filename = {
   mrxvtrc = 'mrxvtrc',
   ['.mrxvtrc'] = 'mrxvtrc',
   ['.msmtprc'] = 'msmtp',
+  ['Muttngrc'] = 'muttrc',
+  ['Muttrc'] = 'muttrc',
   ['.mysql_history'] = 'mysql',
   ['/etc/nanorc'] = 'nanorc',
   Neomuttrc = 'neomuttrc',
@@ -1567,6 +1664,9 @@ local filename = {
   ['/etc/shadow-'] = 'passwd',
   ['/etc/shadow'] = 'passwd',
   ['/etc/passwd.edit'] = 'passwd',
+  ['.gitolite.rc'] = 'perl',
+  ['gitolite.rc'] = 'perl',
+  ['example.gitolite.rc'] = 'perl',
   ['latexmkrc'] = 'perl',
   ['.latexmkrc'] = 'perl',
   ['pf.conf'] = 'pf',
@@ -1622,6 +1722,10 @@ local filename = {
   irbrc = 'ruby',
   ['.irb_history'] = 'ruby',
   irb_history = 'ruby',
+  ['rakefile'] = 'ruby',
+  ['Rakefile'] = 'ruby',
+  ['rantfile'] = 'ruby',
+  ['Rantfile'] = 'ruby',
   Vagrantfile = 'ruby',
   ['smb.conf'] = 'samba',
   screenrc = 'screen',
@@ -1747,19 +1851,7 @@ local detect_muttrc = starsetf('muttrc', { parent = 'utt' })
 local detect_neomuttrc = starsetf('neomuttrc', { parent = 'utt' })
 local detect_xkb = starsetf('xkb', { parent = '/usr/' })
 
---- Table of filetype pattern matching rules grouped by their parent pattern.
----
---- Every filetype pattern match is prefaced with a matching of its parent pattern.
---- If there is no match, skip all matching inside group.
---- Note that unlike leaf patterns, parent patterns do not have special matching behaviour if they
---- contain a `/`.
----
---- When modifying an existing regular pattern, make sure that it still fits its group.
----
---- Vim regexes are converted into explicit Lua patterns (without implicit anchoring):
---- '*/debian/changelog' -> '/debian/changelog$'
---- '*/bind/db.*' -> '/bind/db%.'
---- @type table<string,vim.filetype.mapping>
+---@type table<string,vim.filetype.mapping>
 local pattern = {
   -- BEGIN PATTERN
   ['/debian/'] = {
@@ -2059,13 +2151,6 @@ local pattern = {
     ['%.git/info/exclude$'] = 'gitignore',
     ['/%.config/git/ignore$'] = 'gitignore',
   },
-  ['bash'] = {
-    ['^%.bash[_%-]aliases$'] = detect.bash,
-    ['^%.bash[_%-]history$'] = detect.bash,
-    ['^%.bash[_%-]logout$'] = detect.bash,
-    ['^%.bash[_%-]profile$'] = detect.bash,
-    ['^bash%-fc[%-%.]'] = detect.bash,
-  },
   ['%.cfg'] = {
     ['enlightenment/.*%.cfg$'] = 'c',
     ['Eterm/.*%.cfg$'] = 'eterm',
@@ -2106,15 +2191,11 @@ local pattern = {
     ['%.sst%.meta$'] = 'sisu',
   },
   ['file'] = {
-    ['^[mM]akefile%.am$'] = 'automake',
     ['^Containerfile%.'] = starsetf('dockerfile'),
     ['^Dockerfile%.'] = starsetf('dockerfile'),
-    ['^[jJ]ustfile$'] = 'just',
-    ['[mM]akefile$'] = 'make',
+    ['[mM]akefile$'] = detect.make,
     ['^[mM]akefile'] = starsetf('make'),
-    ['^[rR]akefile$'] = 'ruby',
     ['^[rR]akefile'] = starsetf('ruby'),
-    ['^[rR]antfile$'] = 'ruby',
     ['^%.profile'] = detect.sh,
   },
   ['fvwm'] = {
@@ -2154,9 +2235,7 @@ local pattern = {
     ['/%.mutt/muttrc'] = detect_muttrc,
     ['/%.muttng/muttngrc'] = detect_muttrc,
     ['/%.muttng/muttrc'] = detect_muttrc,
-    ['^Muttngrc$'] = 'muttrc',
     ['^Muttngrc'] = detect_muttrc,
-    ['^Muttrc$'] = 'muttrc',
     ['^Muttrc'] = detect_muttrc,
     -- neomuttrc* and .neomuttrc*
     ['^%.?neomuttrc'] = detect_neomuttrc,
@@ -2180,25 +2259,19 @@ local pattern = {
     ['%.vbproj%.user$'] = 'xml',
   },
   [''] = {
+    ['^bash%-fc[%-%.]'] = detect.bash,
     ['/bind/db%.'] = starsetf('bindzone'),
     ['/named/db%.'] = starsetf('bindzone'),
     ['%.blade%.php$'] = 'blade',
     ['^bzr_log%.'] = 'bzr',
     ['^cabal%.project%.'] = starsetf('cabalproject'),
     ['^sgml%.catalog'] = starsetf('catalog'),
-    ['%.[Cc][Ff][Gg]$'] = {
-      detect.cfg,
-      -- Decrease priority to avoid conflicts with more specific patterns
-      -- such as '.*/etc/a2ps/.*%.cfg', '.*enlightenment/.*%.cfg', etc.
-      { priority = -1 },
-    },
     ['hgrc$'] = 'cfg',
     ['^[cC]hange[lL]og'] = starsetf(detect.changelog),
     ['%.%.ch$'] = 'chill',
     ['%.cmake%.in$'] = 'cmake',
     ['^crontab%.'] = starsetf('crontab'),
     ['^cvs%d+$'] = 'cvs',
-    ['%.[Dd][Aa][Tt]$'] = detect.dat,
     ['^php%.ini%-'] = 'dosini',
     ['^drac%.'] = starsetf('dracula'),
     ['/dtrace/.*%.d$'] = 'dtrace',
@@ -2229,40 +2302,28 @@ local pattern = {
     ['^[jt]sconfig.*%.json$'] = 'jsonc',
     ['^Config%.in%.'] = starsetf('kconfig'),
     ['^Kconfig%.'] = starsetf('kconfig'),
-    ['%.[Ss][Uu][Bb]$'] = 'krl',
     ['/ldscripts/'] = 'ld',
     ['lftp/rc$'] = 'lftp',
     ['/LiteStep/.*/.*%.rc$'] = 'litestep',
-    ['%.[Ll][Oo][Gg]$'] = detect.log,
     ['^/tmp/SLRN[0-9A-Z.]+$'] = 'mail',
     ['^ae%d+%.txt$'] = 'mail',
     ['^pico%.%d+$'] = 'mail',
     ['^reportbug%-'] = starsetf('mail'),
     ['^snd%.%d+$'] = 'mail',
-    ['%.[Mm][Oo][Dd]$'] = detect.mod,
     ['^rndc.*%.key$'] = 'named',
-    ['%.NS[ACGLMNPS]$'] = 'natural',
-    ['%.[1-9]$'] = detect.nroff,
     ['^tmac%.'] = starsetf('nroff'),
     ['%.ml%.cppo$'] = 'ocaml',
     ['%.mli%.cppo$'] = 'ocaml',
     ['/octave/history$'] = 'octave',
     ['%.opam%.locked$'] = 'opam',
     ['%.opam%.template$'] = 'opam',
-    ['%.[Oo][Pp][Ll]$'] = 'opl',
-    ['^%.?gitolite%.rc$'] = 'perl',
-    ['^example%.gitolite%.rc$'] = 'perl',
-    ['%.php%d$'] = 'php',
-    ['%.[Pp][Rr][Gg]$'] = detect.prg,
     ['printcap'] = starsetf(function(path, bufnr)
       return require('vim.filetype.detect').printcap('print')
     end),
     ['/queries/.*%.scm$'] = 'query', -- treesitter queries (Neovim only)
     [',v$'] = 'rcs',
-    ['%.[Ss][Rr][Cc]$'] = detect.src,
     ['^svn%-commit.*%.tmp$'] = 'svn',
     ['%.swift%.gyb$'] = 'swiftgyb',
-    ['%.[Ss][Yy][Ss]$'] = detect.sys,
     ['termcap'] = starsetf(function(path, bufnr)
       return require('vim.filetype.detect').printcap('term')
     end),
@@ -2420,7 +2481,7 @@ end
 ---     ['.*/etc/foo/.*%.conf'] = { 'dosini', { priority = 10 } },
 ---     -- A pattern containing an environment variable
 ---     ['${XDG_CONFIG_HOME}/foo/git'] = 'git',
----     ['README.(%a+)$'] = function(path, bufnr, ext)
+---     ['.*README.(%a+)'] = function(path, bufnr, ext)
 ---       if ext == 'md' then
 ---         return 'markdown'
 ---       elseif ext == 'rst' then

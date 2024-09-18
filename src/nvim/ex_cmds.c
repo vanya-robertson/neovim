@@ -204,7 +204,7 @@ void do_ascii(exarg_T *eap)
       IObuff[iobuff_len++] = ' ';
     }
     IObuff[iobuff_len++] = '<';
-    if (utf_iscomposing(c)) {
+    if (utf_iscomposing_first(c)) {
       IObuff[iobuff_len++] = ' ';  // Draw composing char on top of a space.
     }
     iobuff_len += (size_t)utf_char2bytes(c, IObuff + iobuff_len);
@@ -311,9 +311,7 @@ void ex_align(exarg_T *eap)
         }
       }
     }
-    if (new_indent < 0) {
-      new_indent = 0;
-    }
+    new_indent = MAX(new_indent, 0);
     set_indent(new_indent, 0);                    // set indent
   }
   changed_lines(curbuf, eap->line1, 0, eap->line2 + 1, 0, true);
@@ -543,9 +541,7 @@ void ex_sort(exarg_T *eap)
   for (linenr_T lnum = eap->line1; lnum <= eap->line2; lnum++) {
     char *s = ml_get(lnum);
     int len = ml_get_len(lnum);
-    if (maxlen < len) {
-      maxlen = len;
-    }
+    maxlen = MAX(maxlen, len);
 
     colnr_T start_col = 0;
     colnr_T end_col = len;
@@ -705,11 +701,6 @@ sortend:
 /// @return  FAIL for failure, OK otherwise
 int do_move(linenr_T line1, linenr_T line2, linenr_T dest)
 {
-  linenr_T l;
-  linenr_T extra;      // Num lines added before line1
-  linenr_T num_lines;  // Num lines moved
-  linenr_T last_line;  // Last line in file after adding new text
-
   if (dest >= line1 && dest < line2) {
     emsg(_("E134: Cannot move a range of lines into itself"));
     return FAIL;
@@ -720,11 +711,9 @@ int do_move(linenr_T line1, linenr_T line2, linenr_T dest)
   if (dest == line1 - 1 || dest == line2) {
     // Move the cursor as if lines were moved (see below) to be backwards
     // compatible.
-    if (dest >= line1) {
-      curwin->w_cursor.lnum = dest;
-    } else {
-      curwin->w_cursor.lnum = dest + (line2 - line1) + 1;
-    }
+    curwin->w_cursor.lnum = dest >= line1
+                            ? dest
+                            : dest + (line2 - line1) + 1;
     return OK;
   }
 
@@ -733,13 +722,16 @@ int do_move(linenr_T line1, linenr_T line2, linenr_T dest)
   bcount_t extent_byte = end_byte - start_byte;
   bcount_t dest_byte = ml_find_line_or_offset(curbuf, dest + 1, NULL, true);
 
-  num_lines = line2 - line1 + 1;
+  linenr_T num_lines = line2 - line1 + 1;  // Num lines moved
 
   // First we copy the old text to its new location -- webb
   // Also copy the flag that ":global" command uses.
   if (u_save(dest, dest + 1) == FAIL) {
     return FAIL;
   }
+
+  linenr_T l;
+  linenr_T extra;      // Num lines added before line1
   for (extra = 0, l = line1; l <= line2; l++) {
     char *str = xstrnsave(ml_get(l + extra), (size_t)ml_get_len(l + extra));
     ml_append(dest + l - line1, str, 0, false);
@@ -762,7 +754,7 @@ int do_move(linenr_T line1, linenr_T line2, linenr_T dest)
   //
   // And Finally we adjust the marks we put at the end of the file back to
   // their final destination at the new text position -- webb
-  last_line = curbuf->b_ml.ml_line_count;
+  linenr_T last_line = curbuf->b_ml.ml_line_count;  // Last line in file after adding new text
   mark_adjust_nofold(line1, line2, last_line - line2, 0, kExtmarkNOOP);
 
   disable_fold_update++;
@@ -838,9 +830,7 @@ int do_move(linenr_T line1, linenr_T line2, linenr_T dest)
   if (line1 < dest) {
     dest += num_lines + 1;
     last_line = curbuf->b_ml.ml_line_count;
-    if (dest > last_line + 1) {
-      dest = last_line + 1;
-    }
+    dest = MIN(dest, last_line + 1);
     changed_lines(curbuf, line1, 0, dest, 0, false);
   } else {
     changed_lines(curbuf, dest + 1, 0, line1 + num_lines, 0, false);
@@ -2357,9 +2347,9 @@ int do_ecmd(int fnum, char *ffname, char *sfname, exarg_T *eap, linenr_T newlnum
         win_T *the_curwin = curwin;
         buf_T *was_curbuf = curbuf;
 
-        // Set w_closing to avoid that autocommands close the window.
+        // Set w_locked to avoid that autocommands close the window.
         // Set b_locked for the same reason.
-        the_curwin->w_closing = true;
+        the_curwin->w_locked = true;
         buf->b_locked++;
 
         if (curbuf == old_curbuf.br_buf) {
@@ -2375,7 +2365,7 @@ int do_ecmd(int fnum, char *ffname, char *sfname, exarg_T *eap, linenr_T newlnum
 
         // Autocommands may have closed the window.
         if (win_valid(the_curwin)) {
-          the_curwin->w_closing = false;
+          the_curwin->w_locked = false;
         }
         buf->b_locked--;
 
@@ -2705,7 +2695,7 @@ int do_ecmd(int fnum, char *ffname, char *sfname, exarg_T *eap, linenr_T newlnum
       *so_ptr = 999;    // force cursor to be vertically centered in the window
     }
     update_topline(curwin);
-    curwin->w_scbind_pos = curwin->w_topline;
+    curwin->w_scbind_pos = plines_m_win_fill(curwin, 1, curwin->w_topline);
     *so_ptr = n;
     redraw_curbuf_later(UPD_NOT_VALID);  // redraw this buffer later
   }
@@ -2791,7 +2781,7 @@ void ex_append(exarg_T *eap)
     } else if (eap->ea_getline == NULL) {
       // No getline() function, use the lines that follow. This ends
       // when there is no more.
-      if (eap->nextcmd == NULL || *eap->nextcmd == NUL) {
+      if (eap->nextcmd == NULL) {
         break;
       }
       p = vim_strchr(eap->nextcmd, NL);
@@ -2801,6 +2791,8 @@ void ex_append(exarg_T *eap)
       theline = xmemdupz(eap->nextcmd, (size_t)(p - eap->nextcmd));
       if (*p != NUL) {
         p++;
+      } else {
+        p = NULL;
       }
       eap->nextcmd = p;
     } else {
@@ -2931,9 +2923,7 @@ void ex_z(exarg_T *eap)
   } else {
     bigness = curwin->w_height_inner - 3;
   }
-  if (bigness < 1) {
-    bigness = 1;
-  }
+  bigness = MAX(bigness, 1);
 
   char *x = eap->arg;
   char *kind = x;
@@ -3006,19 +2996,9 @@ void ex_z(exarg_T *eap)
     break;
   }
 
-  if (start < 1) {
-    start = 1;
-  }
-
-  if (end > curbuf->b_ml.ml_line_count) {
-    end = curbuf->b_ml.ml_line_count;
-  }
-
-  if (curs > curbuf->b_ml.ml_line_count) {
-    curs = curbuf->b_ml.ml_line_count;
-  } else if (curs < 1) {
-    curs = 1;
-  }
+  start = MAX(start, 1);
+  end = MIN(end, curbuf->b_ml.ml_line_count);
+  curs = MIN(MAX(curs, 1), curbuf->b_ml.ml_line_count);
 
   for (linenr_T i = start; i <= end; i++) {
     if (minus && i == lnum) {
@@ -3088,8 +3068,8 @@ void sub_get_replacement(SubReplacementString *const ret_sub)
 void sub_set_replacement(SubReplacementString sub)
 {
   xfree(old_sub.sub);
-  if (sub.additional_elements != old_sub.additional_elements) {
-    tv_list_unref(old_sub.additional_elements);
+  if (sub.additional_data != old_sub.additional_data) {
+    xfree(old_sub.additional_data);
   }
   old_sub = sub;
 }
@@ -3105,7 +3085,7 @@ void sub_set_replacement(SubReplacementString sub)
 ///
 /// @returns true if :substitute can be replaced with a join command
 static bool sub_joining_lines(exarg_T *eap, char *pat, size_t patlen, const char *sub,
-                              const char *cmd, bool save)
+                              const char *cmd, bool save, bool keeppatterns)
   FUNC_ATTR_NONNULL_ARG(1, 4, 5)
 {
   // TODO(vim): find a generic solution to make line-joining operations more
@@ -3143,7 +3123,7 @@ static bool sub_joining_lines(exarg_T *eap, char *pat, size_t patlen, const char
     }
 
     if (save) {
-      if ((cmdmod.cmod_flags & CMOD_KEEPPATTERNS) == 0) {
+      if (!keeppatterns) {
         save_re_pat(RE_SUBST, pat, patlen, magic_isset());
       }
       // put pattern in history
@@ -3351,6 +3331,7 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const int cmdpreview_n
   linenr_T old_line_count = curbuf->b_ml.ml_line_count;
   char *sub_firstline;    // allocated copy of first sub line
   bool endcolumn = false;   // cursor in last column when done
+  const bool keeppatterns = cmdmod.cmod_flags & CMOD_KEEPPATTERNS;
   PreviewLines preview_lines = { KV_INITIAL_VALUE, 0 };
   static int pre_hl_id = 0;
   pos_T old_cursor = curwin->w_cursor;
@@ -3397,12 +3378,12 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const int cmdpreview_n
       which_pat = RE_LAST;                  // use last used regexp
       delimiter = (uint8_t)(*cmd++);                   // remember delimiter character
       pat = cmd;                            // remember start of search pat
-      patlen = strlen(pat);
       cmd = skip_regexp_ex(cmd, delimiter, magic_isset(), &eap->arg, NULL, NULL);
       if (cmd[0] == delimiter) {            // end delimiter found
         *cmd++ = NUL;                       // replace it with a NUL
         has_second_delim = true;
       }
+      patlen = strlen(pat);
     }
 
     // Small incompatibility: vi sees '\n' as end of the command, but in
@@ -3411,11 +3392,11 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const int cmdpreview_n
     cmd = skip_substitute(cmd, delimiter);
     sub = xstrdup(p);
 
-    if (!eap->skip && cmdpreview_ns <= 0) {
+    if (!eap->skip && !keeppatterns && cmdpreview_ns <= 0) {
       sub_set_replacement((SubReplacementString) {
         .sub = xstrdup(sub),
         .timestamp = os_time(),
-        .additional_elements = NULL,
+        .additional_data = NULL,
       });
     }
   } else if (!eap->skip) {    // use previous pattern and substitution
@@ -3432,7 +3413,8 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const int cmdpreview_n
     endcolumn = (curwin->w_curswant == MAXCOL);
   }
 
-  if (sub != NULL && sub_joining_lines(eap, pat, patlen, sub, cmd, cmdpreview_ns <= 0)) {
+  if (sub != NULL && sub_joining_lines(eap, pat, patlen, sub, cmd, cmdpreview_ns <= 0,
+                                       keeppatterns)) {
     xfree(sub);
     return 0;
   }
@@ -3459,9 +3441,7 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const int cmdpreview_n
     }
     eap->line1 = eap->line2;
     eap->line2 += (linenr_T)i - 1;
-    if (eap->line2 > curbuf->b_ml.ml_line_count) {
-      eap->line2 = curbuf->b_ml.ml_line_count;
-    }
+    eap->line2 = MIN(eap->line2, curbuf->b_ml.ml_line_count);
   }
 
   // check for trailing command or garbage
@@ -3725,10 +3705,8 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const int cmdpreview_n
               print_line_no_prefix(lnum, subflags.do_number, subflags.do_list);
 
               getvcol(curwin, &curwin->w_cursor, &sc, NULL, NULL);
-              curwin->w_cursor.col = regmatch.endpos[0].col - 1;
-              if (curwin->w_cursor.col < 0) {
-                curwin->w_cursor.col = 0;
-              }
+              curwin->w_cursor.col = MAX(regmatch.endpos[0].col - 1, 0);
+
               getvcol(curwin, &curwin->w_cursor, NULL, NULL, &ec);
               curwin->w_cursor.col = regmatch.startpos[0].col;
               if (subflags.do_number || curwin->w_p_nu) {

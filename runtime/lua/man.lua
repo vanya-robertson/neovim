@@ -479,7 +479,13 @@ local function put_page(page)
   -- XXX: nroff justifies text by filling it with whitespace.  That interacts
   -- badly with our use of $MANWIDTH=999.  Hack around this by using a fixed
   -- size for those whitespace regions.
-  vim.cmd([[silent! keeppatterns keepjumps %s/\s\{199,}/\=repeat(' ', 10)/g]])
+  -- Use try/catch to avoid setting v:errmsg.
+  vim.cmd([[
+    try
+      keeppatterns keepjumps %s/\s\{199,}/\=repeat(' ', 10)/g
+    catch
+    endtry
+  ]])
   vim.cmd('1') -- Move cursor to first line
   highlight_man_page()
   set_options()
@@ -717,7 +723,7 @@ function M.open_page(count, smods, args)
   end
 
   sect, name = extract_sect_and_name_path(path)
-  local buf = fn.bufnr()
+  local buf = api.nvim_get_current_buf()
   local save_tfu = vim.bo[buf].tagfunc
   vim.bo[buf].tagfunc = "v:lua.require'man'.goto_tag"
 
@@ -733,7 +739,9 @@ function M.open_page(count, smods, args)
     end
   end)
 
-  vim.bo[buf].tagfunc = save_tfu
+  if api.nvim_buf_is_valid(buf) then
+    vim.bo[buf].tagfunc = save_tfu
+  end
 
   if not ok then
     error(ret)

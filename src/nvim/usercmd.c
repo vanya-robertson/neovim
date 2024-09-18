@@ -415,7 +415,7 @@ char *get_user_cmd_complete(expand_T *xp, int idx)
     return NULL;
   }
   char *cmd_compl = get_command_complete(idx);
-  if (cmd_compl == NULL) {
+  if (cmd_compl == NULL || idx == EXPAND_USER_LUA) {
     return "";
   }
   return cmd_compl;
@@ -805,9 +805,7 @@ invalid_count:
         }
       }
 
-      if (*def < 0) {
-        *def = 0;
-      }
+      *def = MAX(*def, 0);
     } else if (STRNICMP(attr, "complete", attrlen) == 0) {
       if (val == NULL) {
         semsg(_(e_argument_required_for_str), "-complete");

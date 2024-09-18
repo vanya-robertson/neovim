@@ -1,7 +1,7 @@
 local t = require('test.testutil')
 local n = require('test.functional.testnvim')()
 
-local tt = require('test.functional.terminal.testutil')
+local tt = require('test.functional.testterm')
 local feed_data = tt.feed_data
 local feed, clear = n.feed, n.clear
 local poke_eventloop = n.poke_eventloop
@@ -37,7 +37,7 @@ describe(':terminal window', function()
 
   before_each(function()
     clear()
-    screen = tt.screen_setup()
+    screen = tt.setup_screen()
   end)
 
   it('sets topline correctly #8556', function()
@@ -87,7 +87,7 @@ describe(':terminal window', function()
         {7:       1 }tty ready                                |
         {7:       2 }rows: 6, cols: 48                        |
         {7:       3 }abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO|
-        {7:       4 }WXYZrows: 6, cols: 41                    |
+        {7:       4 }PQRSTUVWXYZrows: 6, cols: 41             |
         {7:       5 }{1: }                                        |
         {7:       6 }                                         |
         {3:-- TERMINAL --}                                    |
@@ -97,7 +97,7 @@ describe(':terminal window', function()
         {7:       1 }tty ready                                |
         {7:       2 }rows: 6, cols: 48                        |
         {7:       3 }abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO|
-        {7:       4 }WXYZrows: 6, cols: 41                    |
+        {7:       4 }PQRSTUVWXYZrows: 6, cols: 41             |
         {7:       5 } abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN|
         {7:       6 }OPQRSTUVWXYZ{1: }                            |
         {3:-- TERMINAL --}                                    |
@@ -132,9 +132,9 @@ describe(':terminal window', function()
       screen:expect([[
         {7:++ 7  }                                            |
         {7:++ 8  }abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQR|
-        {7:++ 9  }TUVWXYZ                                     |
+        {7:++ 9  }STUVWXYZ                                    |
         {7:++10  }abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQR|
-        {7:++11  }TUVWXYZrows: 6, cols: 44                    |
+        {7:++11  }STUVWXYZrows: 6, cols: 44                   |
         {7:++12  }{1: }                                           |
         {3:-- TERMINAL --}                                    |
       ]])
@@ -198,7 +198,7 @@ describe(':terminal with multigrid', function()
 
   before_each(function()
     clear()
-    screen = tt.screen_setup(0, nil, 50, nil, { ext_multigrid = true })
+    screen = tt.setup_screen(0, nil, 50, nil, { ext_multigrid = true })
   end)
 
   it('resizes to requested size', function()

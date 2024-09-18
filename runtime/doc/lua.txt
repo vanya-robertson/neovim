@@ -28,17 +28,18 @@ You can also run Lua scripts from your shell using the |-l| argument: >
     nvim -l foo.lua [args...]
 <
                                                                   *lua-compat*
-Lua 5.1 is the permanent interface for Nvim Lua.  Plugins need only consider
-Lua 5.1, not worry about forward-compatibility with future Lua versions.  If
-Nvim ever ships with Lua 5.4+, a Lua 5.1 compatibility shim will be provided
-so that old plugins continue to work transparently.
+Lua 5.1 is the permanent interface for Nvim Lua. Plugins should target Lua 5.1
+as specified in |luaref|; later versions (which are essentially different,
+incompatible, dialects) are not supported. This includes extensions such as
+`goto` that some Lua 5.1 interpreters like LuaJIT may support.
 
                                                                   *lua-luajit*
-On supported platforms, Nvim is built with LuaJIT, which provides extra
-functionality (compared to PUC Lua) such as "bit" and various utilities (see
-|lua-profile|). Lua code in |init.lua| and plugins can assume its presence on
-many platforms, but for maximum compatibility should check the `jit` global
-variable: >lua
+While Nvim officially only requires Lua 5.1 support, it should be built with
+LuaJIT or a compatible fork on supported platforms for performance reasons.
+LuaJIT also comes with useful extensions such as `ffi`, |lua-profile|, and
+enhanced standard library functions; these cannot be assumed to be available,
+and Lua code in |init.lua| or plugins should check the `jit` global variable
+before using them: >lua
   if jit then
     -- code for luajit
   else
@@ -46,11 +47,12 @@ variable: >lua
   end
 <
                                                                   *lua-bit*
-The LuaJIT "bit" extension module is _always_ available: when built with PUC
-Lua, Nvim includes a fallback implementation which provides `require("bit")`.
+One exception is the LuaJIT `bit` extension, which is always available: when
+built with PUC Lua, Nvim includes a fallback implementation which provides
+`require("bit")`.
 
                                                                   *lua-profile*
-To profile Lua code (with LuaJIT-enabled Nvim), the basic steps are: >lua
+If Nvim is built with LuaJIT, Lua code can be profiled via >lua
     -- Start a profiling session:
     require('jit.p').start('ri1', '/tmp/profile')
 
@@ -59,7 +61,7 @@ To profile Lua code (with LuaJIT-enabled Nvim), the basic steps are: >lua
     -- Stop the session. Profile is written to /tmp/profile.
     require('jit.p').stop()
 
-See https://luajit.org/ext_profiler.html or the "p.lua" source for details: >
+See https://luajit.org/ext_profiler.html or the `p.lua` source for details: >
     :lua vim.cmd.edit(package.searchpath('jit.p', package.path))
 
 ==============================================================================
@@ -350,16 +352,14 @@ Example: >vim
 <
                                                          *lua-table-ambiguous*
 Lua tables are used as both dictionaries and lists, so it is impossible to
-determine whether empty table is meant to be empty list or empty dictionary.
-Additionally Lua does not have integer numbers. To distinguish between these
-cases there is the following agreement:
+decide whether empty table is a list or a dict. Also Lua does not have integer
+numbers. To disambiguate these cases, we define:
                                                                     *lua-list*
-0. Empty table is empty list.
-1. Table with N consecutive integer indices starting from 1 and ending with
-   N is considered a list. See also |list-iterator|.
+0. Empty table is a list. Use |vim.empty_dict()| to represent empty dict.
+1. Table with N consecutive (no `nil` values, aka "holes") integer keys 1…N is
+   a list. See also |list-iterator|.
                                                                     *lua-dict*
-2. Table with string keys, none of which contains NUL byte, is considered to
-   be a dictionary.
+2. Table with string keys, none of which contains NUL byte, is a dict.
 3. Table with string keys, at least one of which contains NUL byte, is also
    considered to be a dictionary, but this time it is converted to
    a |msgpack-special-map|.
@@ -2230,6 +2230,12 @@ vim.tbl_count({t})                                           *vim.tbl_count()*
 vim.tbl_deep_extend({behavior}, {...})                 *vim.tbl_deep_extend()*
     Merges recursively two or more tables.
 
+    Only values that are empty tables or tables that are not |lua-list|s
+    (indexed by consecutive integers starting from 1) are merged recursively.
+    This is useful for merging nested tables like default and user
+    configurations where lists should be treated as literals (i.e., are
+    overwritten instead of merged).
+
     Parameters: ~
       • {behavior}  (`'error'|'keep'|'force'`) Decides what to do if a key is
                     found in more than one map:
@@ -2553,7 +2559,7 @@ vim.ui.input({opts}, {on_confirm})                            *vim.ui.input()*
                       typed (it might be an empty string if nothing was
                       entered), or `nil` if the user aborted the dialog.
 
-vim.ui.open({path})                                            *vim.ui.open()*
+vim.ui.open({path}, {opt})                                     *vim.ui.open()*
     Opens `path` with the system default handler (macOS `open`, Windows
     `explorer.exe`, Linux `xdg-open`, …), or returns (but does not show) an
     error message on failure.
@@ -2564,6 +2570,8 @@ vim.ui.open({path})                                            *vim.ui.open()*
         -- Asynchronous.
         vim.ui.open("https://neovim.io/")
         vim.ui.open("~/path/to/file")
+        -- Use the "osurl" command to handle the path or URL.
+        vim.ui.open("gh#neovim/neovim!29490", { cmd = { 'osurl' } })
         -- Synchronous (wait until the process exits).
         local cmd, err = vim.ui.open("$VIMRUNTIME")
         if cmd then
@@ -2573,6 +2581,8 @@ vim.ui.open({path})                                            *vim.ui.open()*
 
     Parameters: ~
       • {path}  (`string`) Path or URL to open
+      • {opt}   (`{ cmd?: string[] }?`) Options
+                • cmd string[]|nil Command used to open the path or URL.
 
     Return (multiple): ~
         (`vim.SystemObj?`) Command object, or nil if not found.
@@ -2672,7 +2682,7 @@ vim.filetype.add({filetypes})                             *vim.filetype.add()*
             ['.*/etc/foo/.*%.conf'] = { 'dosini', { priority = 10 } },
             -- A pattern containing an environment variable
             ['${XDG_CONFIG_HOME}/foo/git'] = 'git',
-            ['README.(%a+)$'] = function(path, bufnr, ext)
+            ['.*README.(%a+)'] = function(path, bufnr, ext)
               if ext == 'md' then
                 return 'markdown'
               elseif ext == 'rst' then
@@ -3837,10 +3847,12 @@ argument into an *Iter* object with methods (such as |Iter:filter()| and
 chained to create iterator "pipelines": the output of each pipeline stage is
 input to the next stage. The first stage depends on the type passed to
 `vim.iter()`:
-• List tables (arrays, |lua-list|) yield only the value of each element.
-  • Holes (nil values) are allowed.
+• Lists or arrays (|lua-list|) yield only the value of each element.
+  • Holes (nil values) are allowed (but discarded).
+  • Use pairs() to treat array/list tables as dicts (preserve holes and
+    non-contiguous integer keys): `vim.iter(pairs(…))`.
   • Use |Iter:enumerate()| to also pass the index to the next stage.
-  • Or initialize with ipairs(): `vim.iter(ipairs(…))`.
+    • Or initialize with ipairs(): `vim.iter(ipairs(…))`.
 • Non-list tables (|lua-dict|) yield both the key and value of each element.
 • Function |iterator|s yield all values returned by the underlying function.
 • Tables with a |__call()| metamethod are treated as function iterators.

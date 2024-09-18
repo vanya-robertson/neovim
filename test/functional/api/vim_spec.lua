@@ -1435,6 +1435,28 @@ describe('API', function()
     it('cannot handle NULs', function()
       eq(0, api.nvim_strwidth('\0abc'))
     end)
+
+    it('can handle emoji with variant selectors and ZWJ', function()
+      local selector = '❤️'
+      eq(2, fn.strchars(selector))
+      eq(1, fn.strcharlen(selector))
+      eq(2, api.nvim_strwidth(selector))
+
+      local no_selector = '❤'
+      eq(1, fn.strchars(no_selector))
+      eq(1, fn.strcharlen(no_selector))
+      eq(1, api.nvim_strwidth(no_selector))
+
+      local selector_zwj_selector = '🏳️‍⚧️'
+      eq(5, fn.strchars(selector_zwj_selector))
+      eq(1, fn.strcharlen(selector_zwj_selector))
+      eq(2, api.nvim_strwidth(selector_zwj_selector))
+
+      local emoji_zwj_emoji = '🧑‍🌾'
+      eq(3, fn.strchars(emoji_zwj_emoji))
+      eq(1, fn.strcharlen(emoji_zwj_emoji))
+      eq(2, api.nvim_strwidth(emoji_zwj_emoji))
+    end)
   end)
 
   describe('nvim_get_current_line, nvim_set_current_line', function()
@@ -2938,6 +2960,13 @@ describe('API', function()
         return ('%s(%s)%s'):format(typ, args, rest)
       end
     end
+
+    it('does not crash parsing invalid VimL expression #29648', function()
+      api.nvim_input(':<C-r>=')
+      api.nvim_input('1bork/')
+      assert_alive()
+    end)
+
     require('test.unit.viml.expressions.parser_tests')(it, _check_parsing, hl, fmtn)
   end)
 
@@ -3172,7 +3201,7 @@ describe('API', function()
   end)
 
   describe('nvim_get_runtime_file', function()
-    local p = n.alter_slashes
+    local p = t.fix_slashes
     it('can find files', function()
       eq({}, api.nvim_get_runtime_file('bork.borkbork', false))
       eq({}, api.nvim_get_runtime_file('bork.borkbork', true))
@@ -3181,36 +3210,36 @@ describe('API', function()
       local val = api.nvim_get_runtime_file('autoload/remote/*.vim', true)
       eq(2, #val)
       if endswith(val[1], 'define.vim') then
-        ok(endswith(val[1], p 'autoload/remote/define.vim'))
-        ok(endswith(val[2], p 'autoload/remote/host.vim'))
+        ok(endswith(p(val[1]), 'autoload/remote/define.vim'))
+        ok(endswith(p(val[2]), 'autoload/remote/host.vim'))
       else
-        ok(endswith(val[1], p 'autoload/remote/host.vim'))
-        ok(endswith(val[2], p 'autoload/remote/define.vim'))
+        ok(endswith(p(val[1]), 'autoload/remote/host.vim'))
+        ok(endswith(p(val[2]), 'autoload/remote/define.vim'))
       end
       val = api.nvim_get_runtime_file('autoload/remote/*.vim', false)
       eq(1, #val)
       ok(
-        endswith(val[1], p 'autoload/remote/define.vim')
-          or endswith(val[1], p 'autoload/remote/host.vim')
+        endswith(p(val[1]), 'autoload/remote/define.vim')
+          or endswith(p(val[1]), 'autoload/remote/host.vim')
       )
 
       val = api.nvim_get_runtime_file('lua', true)
       eq(1, #val)
-      ok(endswith(val[1], p 'lua'))
+      ok(endswith(p(val[1]), 'lua'))
 
       val = api.nvim_get_runtime_file('lua/vim', true)
       eq(1, #val)
-      ok(endswith(val[1], p 'lua/vim'))
+      ok(endswith(p(val[1]), 'lua/vim'))
     end)
 
     it('can find directories', function()
       local val = api.nvim_get_runtime_file('lua/', true)
       eq(1, #val)
-      ok(endswith(val[1], p 'lua/'))
+      ok(endswith(p(val[1]), 'lua/'))
 
       val = api.nvim_get_runtime_file('lua/vim/', true)
       eq(1, #val)
-      ok(endswith(val[1], p 'lua/vim/'))
+      ok(endswith(p(val[1]), 'lua/vim/'))
 
       eq({}, api.nvim_get_runtime_file('foobarlang/', true))
     end)
@@ -4969,12 +4998,29 @@ describe('API', function()
   it('nvim__redraw', function()
     local screen = Screen.new(60, 5)
     screen:attach()
-    local win = api.nvim_get_current_win()
     eq('at least one action required', pcall_err(api.nvim__redraw, {}))
     eq('at least one action required', pcall_err(api.nvim__redraw, { buf = 0 }))
     eq('at least one action required', pcall_err(api.nvim__redraw, { win = 0 }))
     eq("cannot use both 'buf' and 'win'", pcall_err(api.nvim__redraw, { buf = 0, win = 0 }))
+    local win = api.nvim_get_current_win()
+    -- Can move cursor to recently opened window and window is flushed #28868
     feed(':echo getchar()<CR>')
+    local newwin = api.nvim_open_win(0, false, {
+      relative = 'editor',
+      width = 1,
+      height = 1,
+      row = 1,
+      col = 10,
+    })
+    api.nvim__redraw({ win = newwin, cursor = true })
+    screen:expect({
+      grid = [[
+                                                                    |
+        {1:~         }{4:^ }{1:                                                 }|
+        {1:~                                                           }|*2
+        :echo getchar()                                             |
+      ]],
+    })
     fn.setline(1, 'foobar')
     command('vnew')
     fn.setline(1, 'foobaz')
@@ -4983,11 +5029,13 @@ describe('API', function()
     screen:expect({
       grid = [[
         foobaz                        │foobar                       |
-        {1:~                             }│{1:~                            }|*2
+        {1:~         }{4:^f}{1:                   }│{1:~                            }|
+        {1:~                             }│{1:~                            }|
         {3:[No Name] [+]                  }{2:[No Name] [+]                }|
-        ^:echo getchar()                                             |
+        :echo getchar()                                             |
       ]],
     })
+    api.nvim_win_close(newwin, true)
     -- Can update the grid cursor position #20793
     api.nvim__redraw({ cursor = true })
     screen:expect({

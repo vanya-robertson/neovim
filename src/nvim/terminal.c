@@ -40,8 +40,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <vterm.h>
-#include <vterm_keycodes.h>
 
 #include "klib/kvec.h"
 #include "nvim/api/private/helpers.h"
@@ -94,6 +92,8 @@
 #include "nvim/ui.h"
 #include "nvim/vim_defs.h"
 #include "nvim/window.h"
+#include "vterm/vterm.h"
+#include "vterm/vterm_keycodes.h"
 
 typedef struct {
   VimState state;
@@ -227,11 +227,67 @@ static void schedule_termrequest(Terminal *term, char *payload, size_t payload_l
                  term->pending_send);
 }
 
-static int on_osc(int command, VTermStringFragment frag, void *user)
+static int parse_osc8(VTermStringFragment frag, int *attr)
+  FUNC_ATTR_NONNULL_ALL
 {
-  if (frag.str == NULL) {
+  // Parse the URI from the OSC 8 sequence and add the URL to our URL set.
+  // Skip the ID, we don't use it (for now)
+  size_t i = 0;
+  for (; i < frag.len; i++) {
+    if (frag.str[i] == ';') {
+      break;
+    }
+  }
+
+  // Move past the semicolon
+  i++;
+
+  if (i >= frag.len) {
+    // Invalid OSC sequence
     return 0;
   }
+
+  // Find the terminator
+  const size_t start = i;
+  for (; i < frag.len; i++) {
+    if (frag.str[i] == '\a' || frag.str[i] == '\x1b') {
+      break;
+    }
+  }
+
+  const size_t len = i - start;
+  if (len == 0) {
+    // Empty OSC 8, no URL
+    *attr = 0;
+    return 1;
+  }
+
+  char *url = xmemdupz(&frag.str[start], len + 1);
+  url[len] = 0;
+  *attr = hl_add_url(0, url);
+  xfree(url);
+
+  return 1;
+}
+
+static int on_osc(int command, VTermStringFragment frag, void *user)
+  FUNC_ATTR_NONNULL_ALL
+{
+  Terminal *term = user;
+
+  if (frag.str == NULL || frag.len == 0) {
+    return 0;
+  }
+
+  if (command == 8) {
+    int attr = 0;
+    if (parse_osc8(frag, &attr)) {
+      VTermState *state = vterm_obtain_state(term->vt);
+      VTermValue value = { .number = attr };
+      vterm_state_set_penattr(state, VTERM_ATTR_URI, VTERM_VALUETYPE_INT, &value);
+    }
+  }
+
   if (!has_event(EVENT_TERMREQUEST)) {
     return 1;
   }
@@ -239,7 +295,7 @@ static int on_osc(int command, VTermStringFragment frag, void *user)
   StringBuilder request = KV_INITIAL_VALUE;
   kv_printf(request, "\x1b]%d;", command);
   kv_concat_len(request, frag.str, frag.len);
-  schedule_termrequest(user, request.items, request.size);
+  schedule_termrequest(term, request.items, request.size);
   return 1;
 }
 
@@ -319,8 +375,7 @@ void terminal_open(Terminal **termpp, buf_T *buf, TerminalOptions opts)
   // Set up screen
   term->vts = vterm_obtain_screen(term->vt);
   vterm_screen_enable_altscreen(term->vts, true);
-  // TODO(clason): reenable when https://github.com/neovim/neovim/issues/23762 is fixed
-  // vterm_screen_enable_reflow(term->vts, true);
+  vterm_screen_enable_reflow(term->vts, true);
   // delete empty lines at the end of the buffer
   vterm_screen_set_callbacks(term->vts, &vterm_screen_callbacks, term);
   vterm_screen_set_unrecognised_fallbacks(term->vts, &vterm_fallbacks, term);
@@ -727,6 +782,12 @@ static int terminal_execute(VimState *state, int key)
     FALLTHROUGH;
 
   default:
+    if (key == Ctrl_C) {
+      // terminal_enter() always sets `mapped_ctrl_c` to avoid `got_int`. 8eeda7169aa4
+      // But `got_int` may be set elsewhere, e.g. by interrupt() or an autocommand,
+      // so ensure that it is cleared.
+      got_int = false;
+    }
     if (key == Ctrl_BSL && !s->got_bsl) {
       s->got_bsl = true;
       break;
@@ -993,6 +1054,10 @@ void terminal_get_line_attributes(Terminal *term, win_T *wp, int linenr, int *te
       });
     }
 
+    if (cell.uri > 0) {
+      attr_id = hl_combine_attr(attr_id, cell.uri);
+    }
+
     if (term->cursor.visible && term->cursor.row == row
         && term->cursor.col == col) {
       attr_id = hl_combine_attr(attr_id,
@@ -1191,10 +1256,7 @@ static int term_sb_pop(int cols, VTermScreenCell *cells, void *data)
   memmove(term->sb_buffer, term->sb_buffer + 1,
           sizeof(term->sb_buffer[0]) * (term->sb_current));
 
-  size_t cols_to_copy = (size_t)cols;
-  if (cols_to_copy > sbrow->cols) {
-    cols_to_copy = sbrow->cols;
-  }
+  size_t cols_to_copy = MIN((size_t)cols, sbrow->cols);
 
   // copy to vterm state
   memcpy(cells, sbrow->cells, sizeof(cells[0]) * cols_to_copy);

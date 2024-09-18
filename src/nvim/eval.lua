@@ -380,12 +380,12 @@ M.funcs = {
       <
       If {msg} is empty then it is not used.  Do this to get the
       default message when passing the {lnum} argument.
-
+      					*E1115*
       When {lnum} is present and not negative, and the {error}
       argument is present and matches, then this is compared with
       the line number at which the error was reported. That can be
       the line number in a function or in a script.
-
+      					*E1116*
       When {context} is present it is used as a pattern and matched
       against the context (script name or function name) where
       {lnum} is located in.
@@ -2059,19 +2059,26 @@ M.funcs = {
       This function checks if an executable with the name {expr}
       exists.  {expr} must be the name of the program without any
       arguments.
+
       executable() uses the value of $PATH and/or the normal
-      searchpath for programs.		*PATHEXT*
+      searchpath for programs.
+      					*PATHEXT*
       On MS-Windows the ".exe", ".bat", etc. can optionally be
       included.  Then the extensions in $PATHEXT are tried.  Thus if
       "foo.exe" does not exist, "foo.exe.bat" can be found.  If
-      $PATHEXT is not set then ".exe;.com;.bat;.cmd" is used.  A dot
+      $PATHEXT is not set then ".com;.exe;.bat;.cmd" is used.  A dot
       by itself can be used in $PATHEXT to try using the name
       without an extension.  When 'shell' looks like a Unix shell,
       then the name is also tried without adding an extension.
       On MS-Windows it only checks if the file exists and is not a
       directory, not if it's really executable.
-      On Windows an executable in the same directory as Vim is
-      always found (it is added to $PATH at |startup|).
+      On MS-Windows an executable in the same directory as the Vim
+      executable is always found (it's added to $PATH at |startup|).
+      			*NoDefaultCurrentDirectoryInExePath*
+      On MS-Windows an executable in Vim's current working directory
+      is also normally found, but this can be disabled by setting
+      the $NoDefaultCurrentDirectoryInExePath environment variable.
+
       The result is a Number:
       	1	exists
       	0	does not exist
@@ -2520,6 +2527,23 @@ M.funcs = {
     name = 'file_readable',
     params = { { 'file', 'string' } },
     signature = 'file_readable({file})',
+  },
+  filecopy = {
+    args = 2,
+    base = 1,
+    desc = [[
+      Copy the file pointed to by the name {from} to {to}. The
+      result is a Number, which is |TRUE| if the file was copied
+      successfully, and |FALSE| when it failed.
+      If a file with name {to} already exists, it will fail.
+      Note that it does not handle directories (yet).
+
+      This function is not available in the |sandbox|.
+    ]],
+    name = 'filecopy',
+    params = { { 'from', 'string' }, { 'to', 'string' } },
+    returns = '0|1',
+    signature = 'filecopy({from}, {to})',
   },
   filereadable = {
     args = 1,
@@ -3540,7 +3564,7 @@ M.funcs = {
     ]=],
     name = 'getcharsearch',
     params = {},
-    returns = 'table[]',
+    returns = 'table',
     signature = 'getcharsearch()',
   },
   getcharstr = {
@@ -5669,6 +5693,30 @@ M.funcs = {
     params = { { 'expr', 'any' } },
     signature = 'invert({expr})',
   },
+  isabsolutepath = {
+    args = 1,
+    base = 1,
+    desc = [=[
+      The result is a Number, which is |TRUE| when {path} is an
+      absolute path.
+      On Unix, a path is considered absolute when it starts with '/'.
+      On MS-Windows, it is considered absolute when it starts with an
+      optional drive prefix and is followed by a '\' or '/'. UNC paths
+      are always absolute.
+      Example: >vim
+      	echo isabsolutepath('/usr/share/')	" 1
+      	echo isabsolutepath('./foobar')		" 0
+      	echo isabsolutepath('C:\Windows')	" 1
+      	echo isabsolutepath('foobar')		" 0
+      	echo isabsolutepath('\\remote\file')	" 1
+      <
+    ]=],
+    fast = true,
+    name = 'isabsolutepath',
+    params = { { 'path', 'any' } },
+    returns = '0|1',
+    signature = 'isabsolutepath({path})',
+  },
   isdirectory = {
     args = 1,
     base = 1,
@@ -5752,7 +5800,10 @@ M.funcs = {
       	for [key, value] in items(mydict)
       	   echo key .. ': ' .. value
       	endfor
-
+      <
+      A List or a String argument is also supported.  In these
+      cases, items() returns a List with the index and the value at
+      the index.
     ]=],
     name = 'items',
     params = { { 'dict', 'any' } },
@@ -6391,6 +6442,7 @@ M.funcs = {
         "lhsrawalt" The {lhs} of the mapping as raw bytes, alternate
       	      form, only present when it differs from "lhsraw"
         "rhs"	     The {rhs} of the mapping as typed.
+        "callback" Lua function, if RHS was defined as such.
         "silent"   1 for a |:map-silent| mapping, else 0.
         "noremap"  1 if the {rhs} of the mapping is not remappable.
         "script"   1 if mapping was defined with <script>.
@@ -7992,7 +8044,7 @@ M.funcs = {
 
     ]=],
     name = 'prompt_getprompt',
-    params = { { 'buf', 'any' } },
+    params = { { 'buf', 'integer|string' } },
     signature = 'prompt_getprompt({buf})',
   },
   prompt_setcallback = {
@@ -8032,7 +8084,7 @@ M.funcs = {
 
     ]=],
     name = 'prompt_setcallback',
-    params = { { 'buf', 'any' }, { 'expr', 'any' } },
+    params = { { 'buf', 'integer|string' }, { 'expr', 'string|function' } },
     signature = 'prompt_setcallback({buf}, {expr})',
   },
   prompt_setinterrupt = {
@@ -8049,7 +8101,7 @@ M.funcs = {
 
     ]=],
     name = 'prompt_setinterrupt',
-    params = { { 'buf', 'any' }, { 'expr', 'any' } },
+    params = { { 'buf', 'integer|string' }, { 'expr', 'string|function' } },
     signature = 'prompt_setinterrupt({buf}, {expr})',
   },
   prompt_setprompt = {
@@ -8064,7 +8116,7 @@ M.funcs = {
       <
     ]=],
     name = 'prompt_setprompt',
-    params = { { 'buf', 'any' }, { 'text', 'any' } },
+    params = { { 'buf', 'integer|string' }, { 'text', 'string' } },
     signature = 'prompt_setprompt({buf}, {text})',
   },
   pum_getpos = {
@@ -8874,6 +8926,9 @@ M.funcs = {
       {timeout} is 500 the search stops after half a second.
       The value must not be negative.  A zero value is like not
       giving the argument.
+
+      Note: the timeout is only considered when searching, not
+      while evaluating the {skip} expression.
 
       If the {skip} expression is given it is evaluated with the
       cursor positioned on the start of a match.  If it evaluates to
@@ -12055,7 +12110,7 @@ M.funcs = {
       Like |garbagecollect()|, but executed right away.  This must
       only be called directly to avoid any structure to exist
       internally, and |v:testing| must have been set before calling
-      any function.
+      any function.   *E1142*
     ]=],
     params = {},
     signature = 'test_garbagecollect_now()',
@@ -12394,6 +12449,7 @@ M.funcs = {
     ]=],
     name = 'undotree',
     params = { { 'buf', 'integer|string' } },
+    returns = 'vim.fn.undotree.ret',
     signature = 'undotree([{buf}])',
   },
   uniq = {
